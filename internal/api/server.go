@@ -14,6 +14,7 @@ import (
 	"github.com/eargollo/ditto/internal/config"
 	"github.com/eargollo/ditto/internal/scan"
 	"github.com/eargollo/ditto/internal/scheduler"
+	"github.com/eargollo/ditto/internal/trash"
 )
 
 // Server holds the HTTP server and all handler dependencies.
@@ -28,6 +29,7 @@ func New(
 	db *sql.DB,
 	cfg *config.Config,
 	mgr *scan.Manager,
+	trashMgr *trash.Manager,
 	sched *scheduler.Scheduler,
 	templatesFS fs.FS,
 	staticFS fs.FS,
@@ -41,7 +43,7 @@ func New(
 	scansH := &handlers.ScansHandler{DB: db, Manager: mgr}
 	groupsH := &handlers.GroupsHandler{DB: db}
 	filesH := &handlers.FilesHandler{DB: db}
-	trashH := &handlers.TrashHandler{DB: db}
+	trashH := &handlers.TrashHandler{DB: db, Trash: trashMgr}
 	statsH := &handlers.StatsHandler{DB: db}
 	configH := &handlers.ConfigHandler{DB: db, Cfg: cfg, Manager: mgr}
 

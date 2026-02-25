@@ -14,6 +14,7 @@ import (
 	"github.com/eargollo/ditto/internal/db"
 	"github.com/eargollo/ditto/internal/scan"
 	"github.com/eargollo/ditto/internal/scheduler"
+	"github.com/eargollo/ditto/internal/trash"
 	"github.com/eargollo/ditto/web"
 )
 
@@ -70,6 +71,9 @@ func main() {
 	}
 	mgr := scan.NewManager(database, cfg.ScanPaths, cfg.ExcludePaths, scanCfg)
 
+	// ── Trash manager ──────────────────────────────────────────────────────
+	trashMgr := trash.New(database, cfg.TrashDir)
+
 	// ── Scheduler ──────────────────────────────────────────────────────────
 	sched := scheduler.New()
 	if !cfg.ScanPaused && cfg.Schedule != "" {
@@ -82,6 +86,16 @@ func main() {
 			slog.Warn("invalid cron expression", "expr", cfg.Schedule, "error", err)
 		}
 	}
+
+	if err := sched.AddJob("0 3 * * *", func() {
+		slog.Info("auto-purge triggered")
+		if err := trashMgr.AutoPurge(context.Background()); err != nil {
+			slog.Error("auto-purge failed", "error", err)
+		}
+	}); err != nil {
+		slog.Warn("failed to register auto-purge job", "error", err)
+	}
+
 	sched.Start()
 	defer sched.Stop()
 
@@ -89,7 +103,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	srv := api.New(cfg.HTTPAddr, database, cfg, mgr, sched, web.Templates(), web.Static())
+	srv := api.New(cfg.HTTPAddr, database, cfg, mgr, trashMgr, sched, web.Templates(), web.Static())
 	if err := srv.Run(ctx); err != nil {
 		slog.Error("server error", "error", err)
 		os.Exit(1)

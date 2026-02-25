@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -10,9 +11,9 @@ import (
 
 // Scheduler wraps robfig/cron and tracks the next scheduled run.
 type Scheduler struct {
-	mu      sync.RWMutex
-	c       *cron.Cron
-	entryID cron.EntryID
+	mu       sync.RWMutex
+	c        *cron.Cron
+	entryID  cron.EntryID
 	cronExpr string
 }
 
@@ -40,6 +41,17 @@ func (s *Scheduler) SetJob(expr string, fn func()) error {
 	s.entryID = id
 	s.cronExpr = expr
 	slog.Info("scheduler: job set", "cron", expr)
+	return nil
+}
+
+// AddJob adds a background job that fires on the given cron expression.
+// Unlike SetJob, this does not replace the tracked scan job.
+func (s *Scheduler) AddJob(expr string, fn func()) error {
+	_, err := s.c.AddFunc(expr, fn)
+	if err != nil {
+		return fmt.Errorf("invalid cron expression %q: %w", expr, err)
+	}
+	slog.Info("scheduler: background job added", "cron", expr)
 	return nil
 }
 
