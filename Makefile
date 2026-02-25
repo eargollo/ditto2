@@ -50,7 +50,7 @@ DEV_CONFIG := /tmp/ditto-dev.yaml
 # run builds and starts the server with a /tmp-based config suitable for local
 # development. Data persists across restarts in /tmp/ditto-dev.db.
 run: build
-	@printf 'scan_paths:\n  - /tmp\ndb_path: /tmp/ditto-dev.db\ntrash_dir: /tmp/ditto-dev-trash\nhttp_addr: ":8080"\nlog_level: debug\n' \
+	@printf 'scan_paths:\n  - /tmp\ndb_path: /tmp/ditto-dev.db\ntrash_dir: /tmp/ditto-dev-trash\nhttp_addr: ":8280"\nlog_level: debug\n' \
 		> $(DEV_CONFIG)
 	./$(BINARY) --config $(DEV_CONFIG)
 

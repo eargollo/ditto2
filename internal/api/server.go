@@ -41,7 +41,12 @@ func New(
 
 	statusH := &handlers.StatusHandler{DB: db, Manager: mgr, Sched: sched}
 	scansH := &handlers.ScansHandler{DB: db, Manager: mgr}
-	groupsH := &handlers.GroupsHandler{DB: db}
+	groupsH := &handlers.GroupsHandler{
+		DB:      db,
+		Trash:   trashMgr,
+		Cfg:     cfg,
+		ScanMgr: mgr,
+	}
 	filesH := &handlers.FilesHandler{DB: db}
 	trashH := &handlers.TrashHandler{DB: db, Trash: trashMgr}
 	statsH := &handlers.StatsHandler{DB: db}
