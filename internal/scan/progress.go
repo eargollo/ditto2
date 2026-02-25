@@ -13,4 +13,10 @@ type Progress struct {
 	BytesRead       atomic.Int64
 	CacheHits       atomic.Int64
 	CacheMisses     atomic.Int64
+	Errors          atomic.Int64
 }
+
+// ErrorReporter records a per-file pipeline error: increments the error
+// counter, emits a structured warning log, and persists the event to the
+// scan_errors table so it is visible via GET /api/scans/:id.
+type ErrorReporter func(path, stage, errMsg string)

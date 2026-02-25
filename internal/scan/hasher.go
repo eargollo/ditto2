@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"log/slog"
 	"os"
 	"sync"
 )
@@ -50,7 +49,8 @@ func hashFull(path string) (hash string, n int64, err error) {
 // RunPartialHashers spawns numWorkers goroutines. Each reads FileInfo from in,
 // computes the partial SHA-256, and sends a HashedFile (with partial hash) to
 // out. out is closed once all workers finish.
-func RunPartialHashers(ctx context.Context, numWorkers int, progress *Progress, in <-chan FileInfo, out chan<- HashedFile) {
+// report is called for any file that cannot be opened or read.
+func RunPartialHashers(ctx context.Context, numWorkers int, progress *Progress, in <-chan FileInfo, out chan<- HashedFile, report ErrorReporter) {
 	var wg sync.WaitGroup
 	for range numWorkers {
 		wg.Add(1)
@@ -66,7 +66,7 @@ func RunPartialHashers(ctx context.Context, numWorkers int, progress *Progress, 
 					}
 					hash, n, err := hashPartial(fi.Path)
 					if err != nil {
-						slog.Warn("partial hash failed", "path", fi.Path, "error", err)
+						report(fi.Path, "partial_hash", err.Error())
 						continue
 					}
 					progress.BytesRead.Add(n)
@@ -90,7 +90,8 @@ func RunPartialHashers(ctx context.Context, numWorkers int, progress *Progress, 
 // (whose Hash field currently holds a partial hash), computes the full
 // SHA-256, and sends an updated HashedFile (with full hash) to out.
 // out is closed once all workers finish.
-func RunFullHashers(ctx context.Context, numWorkers int, progress *Progress, in <-chan HashedFile, out chan<- HashedFile) {
+// report is called for any file that cannot be opened or read.
+func RunFullHashers(ctx context.Context, numWorkers int, progress *Progress, in <-chan HashedFile, out chan<- HashedFile, report ErrorReporter) {
 	var wg sync.WaitGroup
 	for range numWorkers {
 		wg.Add(1)
@@ -106,7 +107,7 @@ func RunFullHashers(ctx context.Context, numWorkers int, progress *Progress, in 
 					}
 					hash, n, err := hashFull(hf.Path)
 					if err != nil {
-						slog.Warn("full hash failed", "path", hf.Path, "error", err)
+						report(hf.Path, "full_hash", err.Error())
 						continue
 					}
 					progress.BytesRead.Add(n)

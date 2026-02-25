@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/eargollo/ditto/internal/api"
@@ -20,7 +21,7 @@ func main() {
 	configPath := flag.String("config", "config.yaml", "path to config file")
 	flag.Parse()
 
-	// ── Logging ────────────────────────────────────────────────────────────
+	// ── Logging (initial — overridden below once config is loaded) ─────────
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	})))
@@ -31,6 +32,16 @@ func main() {
 		slog.Error("load config", "error", err)
 		os.Exit(1)
 	}
+
+	// Re-configure logging with the level from config (default: info).
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+		Level: parseLogLevel(cfg.LogLevel),
+	})))
+	slog.Info("ditto starting",
+		"log_level", cfg.LogLevel,
+		"http_addr", cfg.HTTPAddr,
+		"db_path", cfg.DBPath,
+		"scan_paths", cfg.ScanPaths)
 
 	// ── Database ───────────────────────────────────────────────────────────
 	database, err := db.Open(cfg.DBPath)
@@ -84,4 +95,19 @@ func main() {
 		os.Exit(1)
 	}
 	slog.Info("ditto stopped")
+}
+
+// parseLogLevel converts a config string ("debug", "info", "warn", "error")
+// to its slog.Level equivalent. Unknown values default to Info.
+func parseLogLevel(s string) slog.Level {
+	switch strings.ToLower(s) {
+	case "debug":
+		return slog.LevelDebug
+	case "warn":
+		return slog.LevelWarn
+	case "error":
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
+	}
 }

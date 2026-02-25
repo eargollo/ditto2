@@ -9,6 +9,21 @@ import (
 	"time"
 )
 
+// newErrorReporter returns an ErrorReporter that:
+//  1. increments p.Errors
+//  2. emits a slog.Warn with stage, path, and error message
+//  3. inserts a row into scan_errors so the error is visible via the API
+func newErrorReporter(db *sql.DB, scanID int64, p *Progress) ErrorReporter {
+	return func(path, stage, errMsg string) {
+		p.Errors.Add(1)
+		slog.Warn("scan error", "stage", stage, "path", path, "error", errMsg)
+		_, _ = db.Exec(
+			`INSERT INTO scan_errors (scan_id, path, stage, error, occurred_at)
+			 VALUES (?, ?, ?, ?, ?)`,
+			scanID, path, stage, errMsg, time.Now().Unix())
+	}
+}
+
 // FileInfo is a filesystem entry emitted by the walker.
 type FileInfo struct {
 	Path  string
@@ -72,7 +87,7 @@ func (s *Scanner) Run(ctx context.Context, triggeredBy string, progress *Progres
 
 // execute runs the pipeline for an already-created scan record.
 func (s *Scanner) execute(ctx context.Context, scanID int64, triggeredBy string, startedAt time.Time, progress *Progress) error {
-	slog.Info("scan started", "id", scanID, "triggered_by", triggeredBy)
+	slog.Info("scan started", "id", scanID, "triggered_by", triggeredBy, "roots", s.roots)
 
 	runErr := s.runPipeline(ctx, scanID, progress)
 
@@ -100,8 +115,14 @@ func (s *Scanner) execute(ctx context.Context, scanID int64, triggeredBy string,
 		}
 	}
 
-	slog.Info("scan finished", "id", scanID, "status", status,
-		"files_discovered", progress.FilesDiscovered.Load())
+	slog.Info("scan finished",
+		"id", scanID,
+		"status", status,
+		"files_discovered", progress.FilesDiscovered.Load(),
+		"files_hashed", progress.FullHashed.Load(),
+		"cache_hits", progress.CacheHits.Load(),
+		"cache_misses", progress.CacheMisses.Load(),
+		"errors", progress.Errors.Load())
 
 	return runErr
 }
@@ -124,13 +145,16 @@ func (s *Scanner) runPipeline(ctx context.Context, scanID int64, progress *Progr
 	fullOut     := make(chan HashedFile, bufSize)
 	finalOut    := make(chan HashedFile, bufSize)
 
+	// Wire the error reporter: logs warnings and persists to scan_errors.
+	report := newErrorReporter(s.db, scanID, progress)
+
 	// Start pipeline stages (each manages its own goroutine(s)).
-	go Walk(ctx, s.roots, excludes, s.cfg.Walkers, walkOut)
+	go Walk(ctx, s.roots, excludes, s.cfg.Walkers, walkOut, report)
 	RunSizeAccumulator(ctx, progress, walkOut, candidates)
 	RunCacheCheck(ctx, s.db, progress, candidates, cacheHits, cacheMisses)
-	RunPartialHashers(ctx, s.cfg.PartialHashers, progress, cacheMisses, partialOut)
+	RunPartialHashers(ctx, s.cfg.PartialHashers, progress, cacheMisses, partialOut, report)
 	RunPartialHashGrouper(ctx, partialOut, filteredOut)
-	RunFullHashers(ctx, s.cfg.FullHashers, progress, filteredOut, fullOut)
+	RunFullHashers(ctx, s.cfg.FullHashers, progress, filteredOut, fullOut, report)
 	mergeHashedFiles(ctx, cacheHits, fullOut, finalOut)
 
 	// Progress reporter — flushes counters to DB every second.
@@ -190,13 +214,14 @@ func progressReporter(ctx context.Context, db *sql.DB, scanID int64, p *Progress
 	flush := func() {
 		_, err := db.ExecContext(ctx, `
 			UPDATE scan_history
-			SET files_discovered        = ?,
+			SET files_discovered          = ?,
 			    progress_candidates_found = ?,
-			    progress_partial_hashed  = ?,
-			    progress_full_hashed     = ?,
-			    progress_bytes_read      = ?,
-			    cache_hits               = ?,
-			    cache_misses             = ?
+			    progress_partial_hashed   = ?,
+			    progress_full_hashed      = ?,
+			    progress_bytes_read       = ?,
+			    cache_hits                = ?,
+			    cache_misses              = ?,
+			    errors                    = ?
 			WHERE id = ?`,
 			p.FilesDiscovered.Load(),
 			p.CandidatesFound.Load(),
@@ -205,6 +230,7 @@ func progressReporter(ctx context.Context, db *sql.DB, scanID int64, p *Progress
 			p.BytesRead.Load(),
 			p.CacheHits.Load(),
 			p.CacheMisses.Load(),
+			p.Errors.Load(),
 			scanID)
 		if err != nil && ctx.Err() == nil {
 			slog.Warn("progress reporter: update failed", "error", err)
@@ -261,7 +287,8 @@ func finaliseScanRecord(db *sql.DB, scanID int64, status string, finishedAt, dur
 		    cache_misses      = ?,
 		    duplicate_groups  = ?,
 		    duplicate_files   = ?,
-		    reclaimable_bytes = ?
+		    reclaimable_bytes = ?,
+		    errors            = ?
 		WHERE id = ?`,
 		status, finishedAt, durationSecs,
 		p.FilesDiscovered.Load(),
@@ -269,6 +296,7 @@ func finaliseScanRecord(db *sql.DB, scanID int64, status string, finishedAt, dur
 		p.CacheHits.Load(),
 		p.CacheMisses.Load(),
 		dupGroups, dupFiles, reclaimable,
+		p.Errors.Load(),
 		scanID)
 	return err
 }

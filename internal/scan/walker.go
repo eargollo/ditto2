@@ -3,7 +3,6 @@ package scan
 import (
 	"context"
 	"io/fs"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -69,7 +68,8 @@ func (q *dirQueue) Done() {
 // Walk traverses roots concurrently using numWorkers goroutines and sends
 // every regular file it finds to out. Walk closes out when done.
 // Directories and files matching excludePaths are skipped.
-func Walk(ctx context.Context, roots []string, excludePaths map[string]struct{}, numWorkers int, out chan<- FileInfo) {
+// report is called for any filesystem errors encountered during traversal.
+func Walk(ctx context.Context, roots []string, excludePaths map[string]struct{}, numWorkers int, out chan<- FileInfo, report ErrorReporter) {
 	defer close(out)
 
 	q := newDirQueue()
@@ -85,7 +85,7 @@ func Walk(ctx context.Context, roots []string, excludePaths map[string]struct{},
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			walkerWorker(ctx, q, excludePaths, out)
+			walkerWorker(ctx, q, excludePaths, out, report)
 		}()
 	}
 	wg.Wait()
@@ -94,7 +94,7 @@ func Walk(ctx context.Context, roots []string, excludePaths map[string]struct{},
 // walkerWorker pops directories from q, reads their entries, enqueues
 // sub-directories (incrementing pending first), sends files to out, then
 // calls q.Done() to decrement pending.
-func walkerWorker(ctx context.Context, q *dirQueue, excludePaths map[string]struct{}, out chan<- FileInfo) {
+func walkerWorker(ctx context.Context, q *dirQueue, excludePaths map[string]struct{}, out chan<- FileInfo, report ErrorReporter) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -109,7 +109,7 @@ func walkerWorker(ctx context.Context, q *dirQueue, excludePaths map[string]stru
 
 		entries, err := os.ReadDir(dir)
 		if err != nil {
-			slog.Warn("walker: readdir", "dir", dir, "error", err)
+			report(dir, "walk", err.Error())
 			q.Done()
 			continue
 		}
@@ -138,7 +138,7 @@ func walkerWorker(ctx context.Context, q *dirQueue, excludePaths map[string]stru
 
 			info, err := entry.Info()
 			if err != nil {
-				slog.Warn("walker: stat", "path", path, "error", err)
+				report(path, "walk", err.Error())
 				continue
 			}
 
