@@ -5,11 +5,16 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
+
+	"github.com/eargollo/ditto/internal/scan"
+	"github.com/eargollo/ditto/internal/scheduler"
 )
 
 // StatusHandler handles GET /api/status.
 type StatusHandler struct {
-	DB *sql.DB
+	DB      *sql.DB
+	Manager *scan.Manager
+	Sched   *scheduler.Scheduler
 }
 
 type statusResponse struct {
@@ -20,7 +25,7 @@ type statusResponse struct {
 
 type activeScanInfo struct {
 	ID          int64            `json:"id"`
-	StartedAt   time.Time        `json:"started_at"`
+	StartedAt   string           `json:"started_at"`
 	TriggeredBy string           `json:"triggered_by"`
 	Progress    scanProgressInfo `json:"progress"`
 }
@@ -36,74 +41,70 @@ type scanProgressInfo struct {
 }
 
 type scheduleInfo struct {
-	Cron      string     `json:"cron"`
-	Paused    bool       `json:"paused"`
-	NextRunAt *time.Time `json:"next_run_at"`
+	Cron      string  `json:"cron"`
+	Paused    bool    `json:"paused"`
+	NextRunAt *string `json:"next_run_at"`
 }
 
 type completedScanInfo struct {
-	ID               int64     `json:"id"`
-	FinishedAt       time.Time `json:"finished_at"`
-	DuplicateGroups  int64     `json:"duplicate_groups"`
-	DuplicateFiles   int64     `json:"duplicate_files"`
-	ReclaimableBytes int64     `json:"reclaimable_bytes"`
-	CacheHits        int64     `json:"cache_hits"`
-	CacheMisses      int64     `json:"cache_misses"`
-	CacheHitRate     float64   `json:"cache_hit_rate"`
+	ID               int64   `json:"id"`
+	FinishedAt       string  `json:"finished_at"`
+	DuplicateGroups  int64   `json:"duplicate_groups"`
+	DuplicateFiles   int64   `json:"duplicate_files"`
+	ReclaimableBytes int64   `json:"reclaimable_bytes"`
+	CacheHits        int64   `json:"cache_hits"`
+	CacheMisses      int64   `json:"cache_misses"`
+	CacheHitRate     float64 `json:"cache_hit_rate"`
 }
 
 // ServeHTTP returns the system status as JSON.
 func (h *StatusHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	resp := statusResponse{
-		ActiveScan: h.activeScan(),
-		Schedule: scheduleInfo{
-			Cron:      "0 2 * * 0",
-			Paused:    false,
-			NextRunAt: nil,
-		},
+		ActiveScan:        h.activeScan(),
+		Schedule:          h.schedule(),
 		LastCompletedScan: h.lastCompletedScan(),
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
 
 func (h *StatusHandler) activeScan() *activeScanInfo {
-	if h.DB == nil {
+	if h.Manager == nil {
 		return nil
 	}
-	row := h.DB.QueryRow(`
-		SELECT id, started_at, triggered_by,
-		       files_discovered,
-		       progress_candidates_found, progress_partial_hashed,
-		       progress_full_hashed, progress_bytes_read,
-		       cache_hits, cache_misses
-		FROM scan_history
-		WHERE status = 'running'
-		LIMIT 1`)
-
-	var (
-		id          int64
-		startedAt   int64
-		triggeredBy string
-		prog        scanProgressInfo
-	)
-	err := row.Scan(&id, &startedAt, &triggeredBy,
-		&prog.FilesDiscovered,
-		&prog.CandidatesFound, &prog.PartialHashed,
-		&prog.FullHashed, &prog.BytesRead,
-		&prog.CacheHits, &prog.CacheMisses)
-	if err != nil {
-		if err != sql.ErrNoRows {
-			slog.Error("status: query active scan", "error", err)
-		}
+	a := h.Manager.ActiveScan()
+	if a == nil {
 		return nil
 	}
-	t := time.Unix(startedAt, 0).UTC()
+	p := a.Progress
 	return &activeScanInfo{
-		ID:          id,
-		StartedAt:   t,
-		TriggeredBy: triggeredBy,
-		Progress:    prog,
+		ID:          a.ID,
+		StartedAt:   a.StartedAt.UTC().Format(time.RFC3339),
+		TriggeredBy: a.TriggeredBy,
+		Progress: scanProgressInfo{
+			FilesDiscovered: p.FilesDiscovered.Load(),
+			CandidatesFound: p.CandidatesFound.Load(),
+			PartialHashed:   p.PartialHashed.Load(),
+			FullHashed:      p.FullHashed.Load(),
+			BytesRead:       p.BytesRead.Load(),
+			CacheHits:       p.CacheHits.Load(),
+			CacheMisses:     p.CacheMisses.Load(),
+		},
 	}
+}
+
+func (h *StatusHandler) schedule() scheduleInfo {
+	info := scheduleInfo{
+		Cron:   "0 2 * * 0",
+		Paused: false,
+	}
+	if h.Sched != nil {
+		info.Cron = h.Sched.CronExpr()
+		if t := h.Sched.NextRunAt(); t != nil {
+			s := t.UTC().Format(time.RFC3339)
+			info.NextRunAt = &s
+		}
+	}
+	return info
 }
 
 func (h *StatusHandler) lastCompletedScan() *completedScanInfo {
@@ -136,13 +137,12 @@ func (h *StatusHandler) lastCompletedScan() *completedScanInfo {
 		return nil
 	}
 	var hitRate float64
-	total := cacheHits + cacheMisses
-	if total > 0 {
+	if total := cacheHits + cacheMisses; total > 0 {
 		hitRate = float64(cacheHits) / float64(total)
 	}
 	return &completedScanInfo{
 		ID:               id,
-		FinishedAt:       time.Unix(finishedAt, 0).UTC(),
+		FinishedAt:       time.Unix(finishedAt, 0).UTC().Format(time.RFC3339),
 		DuplicateGroups:  duplicateGroups,
 		DuplicateFiles:   duplicateFiles,
 		ReclaimableBytes: reclaimableBytes,

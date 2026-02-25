@@ -1,5 +1,5 @@
 # Binaries
-ditto
+/ditto
 *.exe
 
 # Build output

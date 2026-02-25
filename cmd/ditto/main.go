@@ -11,6 +11,7 @@ import (
 	"github.com/eargollo/ditto/internal/api"
 	"github.com/eargollo/ditto/internal/config"
 	"github.com/eargollo/ditto/internal/db"
+	"github.com/eargollo/ditto/internal/scan"
 	"github.com/eargollo/ditto/internal/scheduler"
 	"github.com/eargollo/ditto/web"
 )
@@ -44,30 +45,40 @@ func main() {
 		os.Exit(1)
 	}
 
-	// ── Settings overlay ───────────────────────────────────────────────────
-	// TODO: load settings from DB and call config.MergeDBSettings(cfg, settings)
+	// Mark any scans that were 'running' when last process exited as failed.
+	if err := scan.MarkStaleScansFailed(database); err != nil {
+		slog.Warn("mark stale scans", "error", err)
+	}
+
+	// ── Scan manager ───────────────────────────────────────────────────────
+	scanCfg := scan.Config{
+		Walkers:        cfg.ScanWorkers.Walkers,
+		PartialHashers: cfg.ScanWorkers.PartialHashers,
+		FullHashers:    cfg.ScanWorkers.FullHashers,
+		BatchSize:      1000,
+	}
+	mgr := scan.NewManager(database, cfg.ScanPaths, cfg.ExcludePaths, scanCfg)
 
 	// ── Scheduler ──────────────────────────────────────────────────────────
 	sched := scheduler.New()
 	if !cfg.ScanPaused && cfg.Schedule != "" {
 		if err := sched.SetJob(cfg.Schedule, func() {
 			slog.Info("scheduled scan triggered")
-			// TODO: trigger scanner
+			if _, err := mgr.Start(context.Background(), "schedule"); err != nil {
+				slog.Warn("scheduled scan start", "error", err)
+			}
 		}); err != nil {
-			slog.Warn("scheduler: invalid cron expression", "expr", cfg.Schedule, "error", err)
+			slog.Warn("invalid cron expression", "expr", cfg.Schedule, "error", err)
 		}
 	}
 	sched.Start()
 	defer sched.Stop()
 
 	// ── HTTP server ────────────────────────────────────────────────────────
-	ctx, stop := signal.NotifyContext(
-		context.Background(),
-		os.Interrupt, syscall.SIGTERM,
-	)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	srv := api.New(cfg.HTTPAddr, database, cfg, web.Templates(), web.Static())
+	srv := api.New(cfg.HTTPAddr, database, cfg, mgr, sched, web.Templates(), web.Static())
 	if err := srv.Run(ctx); err != nil {
 		slog.Error("server error", "error", err)
 		os.Exit(1)

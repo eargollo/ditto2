@@ -9,26 +9,26 @@ import (
 
 // Config holds all configuration loaded from config.yaml.
 type Config struct {
-	ScanPaths          []string    `yaml:"scan_paths"`
-	ExcludePaths       []string    `yaml:"exclude_paths"`
-	Schedule           string      `yaml:"schedule"`
-	ScanPaused         bool        `yaml:"scan_paused"`
-	TrashDir           string      `yaml:"trash_dir"`
-	TrashRetentionDays int         `yaml:"trash_retention_days"`
-	DBPath             string      `yaml:"db_path"`
-	HTTPAddr           string      `yaml:"http_addr"`
-	ScanWorkers        ScanWorkers `yaml:"scan_workers"`
-	LogLevel           string      `yaml:"log_level"`
+	ScanPaths          []string    `yaml:"scan_paths"           json:"scan_paths"`
+	ExcludePaths       []string    `yaml:"exclude_paths"        json:"exclude_paths"`
+	Schedule           string      `yaml:"schedule"             json:"schedule"`
+	ScanPaused         bool        `yaml:"scan_paused"          json:"scan_paused"`
+	TrashDir           string      `yaml:"trash_dir"            json:"-"`
+	TrashRetentionDays int         `yaml:"trash_retention_days" json:"trash_retention_days"`
+	DBPath             string      `yaml:"db_path"              json:"-"`
+	HTTPAddr           string      `yaml:"http_addr"            json:"-"`
+	ScanWorkers        ScanWorkers `yaml:"scan_workers"         json:"scan_workers"`
+	LogLevel           string      `yaml:"log_level"            json:"-"`
 }
 
 // ScanWorkers holds concurrency knobs for the scan pipeline.
 type ScanWorkers struct {
-	Walkers        int `yaml:"walkers"`
-	PartialHashers int `yaml:"partial_hashers"`
-	FullHashers    int `yaml:"full_hashers"`
+	Walkers        int `yaml:"walkers"         json:"walkers"`
+	PartialHashers int `yaml:"partial_hashers" json:"partial_hashers"`
+	FullHashers    int `yaml:"full_hashers"    json:"full_hashers"`
 }
 
-// Defaults applied when values are zero/empty.
+// applyDefaults fills zero/empty fields with sensible defaults.
 func (c *Config) applyDefaults() {
 	if c.Schedule == "" {
 		c.Schedule = "0 2 * * 0"

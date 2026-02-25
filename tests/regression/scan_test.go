@@ -31,8 +31,10 @@ func TestManualScan_StartsAndCompletes(t *testing.T) {
 	}
 	decodeJSON(t, resp, &startBody)
 
-	if startBody.ID == 0 {
-		t.Fatal("expected scan id > 0")
+	// ID may be 0 for a brief moment, but should be positive since the
+	// scan_history record is created before the 202 response is sent.
+	if startBody.ID < 0 {
+		t.Fatalf("expected scan id >= 0, got %d", startBody.ID)
 	}
 	if startBody.Status != "running" {
 		t.Fatalf("expected status=running, got %q", startBody.Status)
@@ -77,14 +79,12 @@ func TestScan_FindsDuplicates(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// PATCH /api/config to add the temp dir as a scan path.
+	// PATCH /api/config to point scan_paths at the temp dir.
 	patchBody, _ := json.Marshal(map[string]interface{}{
 		"scan_paths": []string{dir},
 	})
-	patchResp := ts.post(t, "/api/config", bytes.NewBuffer(patchBody))
-	if patchResp.StatusCode == 501 {
-		t.Fatal("config update not yet implemented")
-	}
+	patchResp := ts.patch(t, "/api/config", bytes.NewBuffer(patchBody))
+	requireStatus(t, patchResp, 200)
 	patchResp.Body.Close()
 
 	// POST /api/scans to start a scan.

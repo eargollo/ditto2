@@ -12,6 +12,8 @@ import (
 
 	"github.com/eargollo/ditto/internal/api/handlers"
 	"github.com/eargollo/ditto/internal/config"
+	"github.com/eargollo/ditto/internal/scan"
+	"github.com/eargollo/ditto/internal/scheduler"
 )
 
 // Server holds the HTTP server and all handler dependencies.
@@ -21,23 +23,28 @@ type Server struct {
 }
 
 // New wires all routes and returns a Server ready to Run.
-// templatesFS and staticFS come from the web package (embed.FS sub-trees).
-func New(addr string, db *sql.DB, cfg *config.Config, templatesFS fs.FS, staticFS fs.FS) *Server {
+func New(
+	addr string,
+	db *sql.DB,
+	cfg *config.Config,
+	mgr *scan.Manager,
+	sched *scheduler.Scheduler,
+	templatesFS fs.FS,
+	staticFS fs.FS,
+) *Server {
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.RequestID)
 
-	// Handler instances
-	statusH := &handlers.StatusHandler{DB: db}
-	scansH := &handlers.ScansHandler{DB: db}
+	statusH := &handlers.StatusHandler{DB: db, Manager: mgr, Sched: sched}
+	scansH := &handlers.ScansHandler{DB: db, Manager: mgr}
 	groupsH := &handlers.GroupsHandler{DB: db}
 	filesH := &handlers.FilesHandler{DB: db}
 	trashH := &handlers.TrashHandler{DB: db}
 	statsH := &handlers.StatsHandler{DB: db}
-	configH := &handlers.ConfigHandler{DB: db, Cfg: cfg}
+	configH := &handlers.ConfigHandler{DB: db, Cfg: cfg, Manager: mgr}
 
-	// API routes
 	r.Route("/api", func(r chi.Router) {
 		r.Get("/status", statusH.ServeHTTP)
 
@@ -65,12 +72,9 @@ func New(addr string, db *sql.DB, cfg *config.Config, templatesFS fs.FS, staticF
 		r.Patch("/config", configH.Update)
 	})
 
-	// Web UI — static assets
 	if staticFS != nil {
 		r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))))
 	}
-
-	// Web UI — HTML pages
 	if templatesFS != nil {
 		ph := newPageHandler(templatesFS)
 		r.Get("/", ph("dashboard.html"))
@@ -81,10 +85,7 @@ func New(addr string, db *sql.DB, cfg *config.Config, templatesFS fs.FS, staticF
 
 	return &Server{
 		addr: addr,
-		srv: &http.Server{
-			Addr:    addr,
-			Handler: r,
-		},
+		srv:  &http.Server{Addr: addr, Handler: r},
 	}
 }
 

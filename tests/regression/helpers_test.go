@@ -60,6 +60,21 @@ func (ts *testServer) post(t *testing.T, path string, body io.Reader) *http.Resp
 	return resp
 }
 
+// patch performs a PATCH request to path with the given JSON body.
+func (ts *testServer) patch(t *testing.T, path string, body io.Reader) *http.Response {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPatch, ts.baseURL+path, body)
+	if err != nil {
+		t.Fatalf("build PATCH %s: %v", path, err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := ts.client.Do(req)
+	if err != nil {
+		t.Fatalf("PATCH %s: %v", path, err)
+	}
+	return resp
+}
+
 // requireStatus fails the test if the response status code != want.
 func requireStatus(t *testing.T, resp *http.Response, want int) {
 	t.Helper()
