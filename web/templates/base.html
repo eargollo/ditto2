@@ -1,0 +1,31 @@
+{{define "base"}}
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-gray-50">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ditto — Duplicate Finder</title>
+  <link rel="stylesheet" href="/static/css/tailwind.css" />
+  <script src="/static/js/htmx.min.js" defer></script>
+</head>
+<body class="h-full flex flex-col">
+
+  <nav class="bg-indigo-700 text-white shadow">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex items-center gap-6">
+      <a href="/" class="font-bold text-lg tracking-tight">Ditto</a>
+      <a href="/groups-ui" class="text-indigo-200 hover:text-white text-sm">Groups</a>
+      <a href="/trash-ui" class="text-indigo-200 hover:text-white text-sm">Trash</a>
+    </div>
+  </nav>
+
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 py-8">
+    {{template "content" .}}
+  </main>
+
+  <footer class="border-t border-gray-200 text-center text-xs text-gray-400 py-3">
+    Ditto
+  </footer>
+
+</body>
+</html>
+{{end}}

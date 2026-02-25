@@ -1,0 +1,20 @@
+version: "3.9"
+
+services:
+  ditto:
+    build: .
+    image: ditto:latest
+    container_name: ditto
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - ditto-data:/data
+      # Mount the directories you want scanned (read-only for safety):
+      # - /volume1:/volume1:ro
+    environment:
+      - TZ=UTC
+
+volumes:
+  ditto-data:

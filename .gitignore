@@ -1,0 +1,21 @@
+# Binaries
+ditto
+*.exe
+
+# Build output
+dist/
+
+# Config with real values
+config.yaml
+
+# Data directory (mounted in Docker)
+data/
+
+# Go test cache
+*.test
+
+# Editor
+.DS_Store
+.idea/
+.vscode/
+*.swp

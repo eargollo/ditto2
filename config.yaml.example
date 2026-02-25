@@ -1,0 +1,23 @@
+scan_paths:
+  - /volume1/photos
+  - /volume1/documents
+
+exclude_paths:
+  - /volume1/photos/originals
+
+schedule: "0 2 * * 0"   # Sundays at 2am
+scan_paused: false
+
+trash_dir: /data/trash
+trash_retention_days: 30
+
+db_path: /data/ditto.db
+
+http_addr: ":8080"
+
+scan_workers:
+  walkers: 4
+  partial_hashers: 4
+  full_hashers: 2
+
+log_level: info
