@@ -42,111 +42,114 @@
   </div>
 
   {{if eq .Group.Status "unresolved"}}
-  <!-- Files with delete actions -->
+  <!-- Two-column: preview + file list -->
   <div class="bg-white shadow rounded-lg overflow-hidden">
-    <div class="px-6 py-4 border-b border-gray-200 flex items-center gap-3">
+
+    <!-- Mode toggle tabs -->
+    <div class="px-6 py-3 border-b border-gray-200 flex items-center gap-3">
       <h2 class="text-sm font-semibold text-gray-800 flex-1">Files in this group</h2>
-      <!-- Mode toggle tabs -->
-      <button type="button"
-        onclick="switchDeleteMode('detail', 'keep')"
-        id="tab-keep-detail"
+      <button type="button" onclick="switchDeleteMode('detail', 'keep')" id="tab-keep-detail"
         class="px-3 py-1 text-xs rounded-full bg-indigo-50 text-indigo-700 font-medium">
         Keep one
       </button>
-      <button type="button"
-        onclick="switchDeleteMode('detail', 'select')"
-        id="tab-select-detail"
+      <button type="button" onclick="switchDeleteMode('detail', 'select')" id="tab-select-detail"
         class="px-3 py-1 text-xs rounded-full text-gray-500 hover:bg-gray-100">
         Select to delete
       </button>
     </div>
 
-    <!-- Keep-one mode (default visible) -->
-    <div id="mode-keep-detail">
-      <form method="POST" action="/ui/groups/{{.Group.ID}}/delete">
-        <table class="min-w-full divide-y divide-gray-200">
-          <thead class="bg-gray-50">
-            <tr>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">Keep</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">Preview</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Path</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Size</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Modified</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-200">
-            {{range .Files}}
-            <tr class="hover:bg-indigo-50 cursor-pointer" onclick="this.querySelector('input').click()">
-              <td class="px-4 py-3">
-                <input type="radio" name="keeper_id" value="{{.ID}}" required
-                  class="h-4 w-4 text-indigo-600 border-gray-300 focus:ring-indigo-500" />
-              </td>
-              <td class="px-4 py-3">
-                {{if eq .FileType "image"}}
-                <img src="/api/files/{{.ID}}/thumbnail" loading="lazy" alt=""
-                  class="w-12 h-12 object-cover rounded"
-                  onerror="this.style.display='none'">
-                {{end}}
-              </td>
-              <td class="px-4 py-3 font-mono text-xs text-gray-700 max-w-md truncate" title="{{.Path}}">{{.Path}}</td>
-              <td class="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{{humanBytes .Size}}</td>
-              <td class="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{{.MTime}}</td>
-            </tr>
-            {{end}}
-          </tbody>
-        </table>
-        <div class="px-6 py-4 border-t border-gray-200 flex items-center gap-4 bg-gray-50">
-          <button type="submit"
-            class="px-4 py-2 bg-red-600 text-white text-sm font-semibold rounded-md hover:bg-red-700">
-            Delete Others
-          </button>
-          <span class="text-xs text-gray-500">Select the copy to keep; all others go to trash.</span>
-        </div>
-      </form>
-    </div>
+    <div class="flex flex-col md:flex-row">
 
-    <!-- Select-to-delete mode (hidden by default) -->
-    <div id="mode-select-detail" class="hidden">
-      <form method="POST" action="/ui/groups/{{.Group.ID}}/delete">
-        <table class="min-w-full divide-y divide-gray-200">
-          <thead class="bg-gray-50">
-            <tr>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">Delete</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">Preview</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Path</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Size</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Modified</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-200">
-            {{range .Files}}
-            <tr class="hover:bg-red-50 cursor-pointer" onclick="this.querySelector('input').click()">
-              <td class="px-4 py-3">
-                <input type="checkbox" name="delete_file_ids" value="{{.ID}}"
-                  class="h-4 w-4 text-red-600 border-gray-300 rounded focus:ring-red-500" />
-              </td>
-              <td class="px-4 py-3">
-                {{if eq .FileType "image"}}
-                <img src="/api/files/{{.ID}}/thumbnail" loading="lazy" alt=""
-                  class="w-12 h-12 object-cover rounded"
-                  onerror="this.style.display='none'">
-                {{end}}
-              </td>
-              <td class="px-4 py-3 font-mono text-xs text-gray-700 max-w-md truncate" title="{{.Path}}">{{.Path}}</td>
-              <td class="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{{humanBytes .Size}}</td>
-              <td class="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{{.MTime}}</td>
-            </tr>
-            {{end}}
-          </tbody>
-        </table>
-        <div class="px-6 py-4 border-t border-gray-200 flex items-center gap-4 bg-gray-50">
-          <button type="submit"
-            class="px-4 py-2 bg-red-600 text-white text-sm font-semibold rounded-md hover:bg-red-700">
-            Delete Selected
-          </button>
-          <span class="text-xs text-gray-500">Checked files go to trash; unchecked are kept.</span>
+      <!-- Left: preview panel (one preview — all files are identical content) -->
+      {{with index .Files 0}}
+      <div class="md:w-2/5 border-b md:border-b-0 md:border-r border-gray-200 bg-gray-50 flex items-center justify-center p-4 min-h-64">
+        {{if eq .FileType "image"}}
+        <img src="/api/files/{{.ID}}/preview"
+          class="max-w-full max-h-96 object-contain rounded shadow-sm"
+          alt="Preview" onerror="this.replaceWith(fileIcon('image'))">
+
+        {{else if eq .FileType "video"}}
+        <video controls preload="metadata"
+          class="max-w-full max-h-96 rounded shadow-sm"
+          src="/api/files/{{.ID}}/preview">
+          Your browser does not support video playback.
+        </video>
+
+        {{else if eq .FileType "document"}}
+        <iframe src="/api/files/{{.ID}}/preview"
+          class="w-full rounded shadow-sm border border-gray-200"
+          style="height:24rem;"
+          title="Document preview">
+        </iframe>
+
+        {{else}}
+        <div class="flex flex-col items-center gap-3 text-gray-300">
+          <svg class="w-24 h-24" fill="none" stroke="currentColor" stroke-width="1" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round"
+              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+          </svg>
+          <span class="text-sm text-gray-400">No preview available</span>
         </div>
-      </form>
+        {{end}}
+      </div>
+      {{end}}
+
+      <!-- Right: file list -->
+      <div class="flex-1 flex flex-col">
+
+        <!-- Keep-one mode (default) -->
+        <div id="mode-keep-detail" class="flex-1 flex flex-col">
+          <form method="POST" action="/ui/groups/{{.Group.ID}}/delete" class="flex-1 flex flex-col">
+            <div class="divide-y divide-gray-100 flex-1">
+              {{range .Files}}
+              <label class="flex items-start gap-3 px-5 py-3 hover:bg-indigo-50 cursor-pointer">
+                <input type="radio" name="keeper_id" value="{{.ID}}" required
+                  class="mt-1 h-4 w-4 text-indigo-600 border-gray-300 focus:ring-indigo-500 shrink-0">
+                <div class="min-w-0 flex-1">
+                  <p class="font-medium text-sm text-gray-800 truncate" title="{{.Path}}">{{base .Path}}</p>
+                  <p class="font-mono text-xs text-gray-400 truncate" title="{{.Path}}">{{.Path}}</p>
+                  <p class="text-xs text-gray-400 mt-0.5">{{humanBytes .Size}} &middot; {{.MTime}}</p>
+                </div>
+              </label>
+              {{end}}
+            </div>
+            <div class="px-5 py-4 border-t border-gray-200 bg-gray-50 flex items-center gap-4">
+              <button type="submit"
+                class="px-4 py-2 bg-red-600 text-white text-sm font-semibold rounded-md hover:bg-red-700">
+                Delete Others
+              </button>
+              <span class="text-xs text-gray-500">Select the copy to keep; all others go to trash.</span>
+            </div>
+          </form>
+        </div>
+
+        <!-- Select-to-delete mode (hidden by default) -->
+        <div id="mode-select-detail" class="hidden flex-1 flex flex-col">
+          <form method="POST" action="/ui/groups/{{.Group.ID}}/delete" class="flex-1 flex flex-col">
+            <div class="divide-y divide-gray-100 flex-1">
+              {{range .Files}}
+              <label class="flex items-start gap-3 px-5 py-3 hover:bg-red-50 cursor-pointer">
+                <input type="checkbox" name="delete_file_ids" value="{{.ID}}"
+                  class="mt-1 h-4 w-4 text-red-600 border-gray-300 rounded focus:ring-red-500 shrink-0">
+                <div class="min-w-0 flex-1">
+                  <p class="font-medium text-sm text-gray-800 truncate" title="{{.Path}}">{{base .Path}}</p>
+                  <p class="font-mono text-xs text-gray-400 truncate" title="{{.Path}}">{{.Path}}</p>
+                  <p class="text-xs text-gray-400 mt-0.5">{{humanBytes .Size}} &middot; {{.MTime}}</p>
+                </div>
+              </label>
+              {{end}}
+            </div>
+            <div class="px-5 py-4 border-t border-gray-200 bg-gray-50 flex items-center gap-4">
+              <button type="submit"
+                class="px-4 py-2 bg-red-600 text-white text-sm font-semibold rounded-md hover:bg-red-700">
+                Delete Selected
+              </button>
+              <span class="text-xs text-gray-500">Checked files go to trash; unchecked are kept.</span>
+            </div>
+          </form>
+        </div>
+
+      </div>
     </div>
   </div>
 
@@ -160,8 +163,8 @@
           <button type="submit"
             class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-300 bg-white text-sm text-gray-700 rounded-md hover:bg-gray-50">
             By content hash
-            <svg class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-              <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clip-rule="evenodd" />
+            <svg class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clip-rule="evenodd"/>
             </svg>
           </button>
         </form>
@@ -175,8 +178,8 @@
           <button type="submit"
             class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-300 bg-white text-sm text-gray-700 rounded-md hover:bg-gray-50">
             By files
-            <svg class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-              <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clip-rule="evenodd" />
+            <svg class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clip-rule="evenodd"/>
             </svg>
           </button>
         </form>
@@ -188,37 +191,49 @@
   </div>
 
   {{else}}
-  <!-- Read-only file list for non-actionable groups -->
+  <!-- Read-only: two-column layout for non-actionable groups -->
   <div class="bg-white shadow rounded-lg overflow-hidden">
     <div class="px-6 py-4 border-b border-gray-200">
       <h2 class="text-sm font-semibold text-gray-800">Files in this group</h2>
     </div>
-    <table class="min-w-full divide-y divide-gray-200">
-      <thead class="bg-gray-50">
-        <tr>
-          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">Preview</th>
-          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Path</th>
-          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Size</th>
-          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Modified</th>
-        </tr>
-      </thead>
-      <tbody class="divide-y divide-gray-200">
-        {{range .Files}}
-        <tr class="hover:bg-gray-50">
-          <td class="px-4 py-3">
-            {{if eq .FileType "image"}}
-            <img src="/api/files/{{.ID}}/thumbnail" loading="lazy" alt=""
-              class="w-12 h-12 object-cover rounded"
-              onerror="this.style.display='none'">
-            {{end}}
-          </td>
-          <td class="px-4 py-3 font-mono text-xs text-gray-700 max-w-lg truncate" title="{{.Path}}">{{.Path}}</td>
-          <td class="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{{humanBytes .Size}}</td>
-          <td class="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{{.MTime}}</td>
-        </tr>
+    <div class="flex flex-col md:flex-row">
+      {{with index .Files 0}}
+      <div class="md:w-2/5 border-b md:border-b-0 md:border-r border-gray-200 bg-gray-50 flex items-center justify-center p-4 min-h-64">
+        {{if eq .FileType "image"}}
+        <img src="/api/files/{{.ID}}/preview"
+          class="max-w-full max-h-96 object-contain rounded shadow-sm"
+          alt="Preview" onerror="this.style.display='none'">
+        {{else if eq .FileType "video"}}
+        <video controls preload="metadata"
+          class="max-w-full max-h-96 rounded shadow-sm"
+          src="/api/files/{{.ID}}/preview">
+        </video>
+        {{else if eq .FileType "document"}}
+        <iframe src="/api/files/{{.ID}}/preview"
+          class="w-full rounded shadow-sm border border-gray-200"
+          style="height:24rem;" title="Document preview">
+        </iframe>
+        {{else}}
+        <div class="flex flex-col items-center gap-3 text-gray-300">
+          <svg class="w-24 h-24" fill="none" stroke="currentColor" stroke-width="1" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round"
+              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+          </svg>
+          <span class="text-sm text-gray-400">No preview available</span>
+        </div>
         {{end}}
-      </tbody>
-    </table>
+      </div>
+      {{end}}
+      <div class="flex-1 divide-y divide-gray-100">
+        {{range .Files}}
+        <div class="px-5 py-3 hover:bg-gray-50">
+          <p class="font-medium text-sm text-gray-800 truncate" title="{{.Path}}">{{base .Path}}</p>
+          <p class="font-mono text-xs text-gray-400 truncate" title="{{.Path}}">{{.Path}}</p>
+          <p class="text-xs text-gray-400 mt-0.5">{{humanBytes .Size}} &middot; {{.MTime}}</p>
+        </div>
+        {{end}}
+      </div>
+    </div>
   </div>
   {{end}}
 

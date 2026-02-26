@@ -32,6 +32,7 @@ var templateFuncs = template.FuncMap{
 	"humanBytes": humanBytes,
 	"add":        func(a, b int) int { return a + b },
 	"sub":        func(a, b int) int { return a - b },
+	"base":       filepath.Base,
 	"truncate": func(s string, n int) string {
 		if len(s) <= n {
 			return s
