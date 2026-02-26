@@ -1,0 +1,29 @@
+# Ditto — Synology configuration example.
+# Copy this file to /volume1/docker/ditto/config.yaml on your NAS,
+# then edit scan_paths to match your shared folders.
+#
+# All settings can also be changed live through the Settings UI at
+# http://<nas-ip>:8080 — you don't need a config file to get started.
+
+scan_paths:
+  - /volume1/photos
+  - /volume1/documents
+  # - /volume2/backup
+
+exclude_paths: []
+  # - /volume1/photos/raw
+
+schedule: "0 2 * * 0"   # weekly, Sunday at 2 am
+scan_paused: false
+
+db_path: /data/ditto.db
+trash_dir: /data/trash
+trash_retention_days: 30
+
+http_addr: ":8080"
+log_level: info
+
+scan_workers:
+  walkers: 4
+  partial_hashers: 4
+  full_hashers: 2
