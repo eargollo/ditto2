@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS duplicate_groups (
     file_type           TEXT    NOT NULL DEFAULT 'other'
                             CHECK (file_type IN ('image','video','document','other')),
     status              TEXT    NOT NULL DEFAULT 'unresolved'
-                            CHECK (status IN ('unresolved','ignored','resolved')),
+                            CHECK (status IN ('unresolved','ignored','resolved','watching','watching_alert')),
     ignored_at          INTEGER,
     resolved_at         INTEGER,
     first_seen_scan_id  INTEGER,
@@ -189,11 +189,12 @@ CREATE TABLE IF NOT EXISTS whitelist (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     type        TEXT    NOT NULL
                     CHECK (type IN ('hash','path_pair','dir')),
-    value       TEXT    NOT NULL,
-    added_by    TEXT    NOT NULL DEFAULT 'user'
-                    CHECK (added_by IN ('user','config')),
-    added_at    INTEGER NOT NULL,
-    note        TEXT,
+    value         TEXT    NOT NULL,
+    added_by      TEXT    NOT NULL DEFAULT 'user'
+                      CHECK (added_by IN ('user','config')),
+    added_at      INTEGER NOT NULL,
+    note          TEXT,
+    expected_hash TEXT,
 
     UNIQUE (type, value)
 ) STRICT;
