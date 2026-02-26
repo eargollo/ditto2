@@ -11,8 +11,10 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -86,6 +88,7 @@ type groupPageItem struct {
 	ID               int64
 	ContentHash      string
 	HashShort        string
+	DisplayName      string // basename of first file in the group
 	FileSize         int64
 	FileCount        int
 	ReclaimableBytes int64
@@ -93,18 +96,27 @@ type groupPageItem struct {
 	Status           string
 }
 
+// groupWithFiles is a groupPageItem with its files pre-loaded.
+type groupWithFiles struct {
+	groupPageItem
+	Files []groupFileItem
+}
+
 type groupsPageData struct {
 	baseData
-	Items        []groupPageItem
-	Total        int
-	Limit        int
-	Offset       int
-	StatusFilter string
-	TypeFilter   string
-	NextOffset   int
-	PrevOffset   int
-	HasNext      bool
-	HasPrev      bool
+	Groups           []groupWithFiles
+	Total            int
+	Limit            int
+	Offset           int
+	StatusFilter     string
+	TypeFilter       string
+	NextOffset       int
+	PrevOffset       int
+	HasNext          bool
+	HasPrev          bool
+	TotalActiveGroups int64
+	TotalActiveFiles  int64
+	TotalReclaimable  int64
 }
 
 type groupFileItem struct {
@@ -211,7 +223,7 @@ func (ps *pageServer) dashboardPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (ps *pageServer) groupsPage(w http.ResponseWriter, r *http.Request) {
-	const pageLimit = 50
+	const pageLimit = 20
 	q := r.URL.Query()
 	statusFilter := q.Get("status")
 	typeFilter := q.Get("type")
@@ -235,6 +247,13 @@ func (ps *pageServer) groupsPage(w http.ResponseWriter, r *http.Request) {
 		args = append(args, typeFilter)
 	}
 
+	// Overall active stats (always from active groups, regardless of filter).
+	var totalActiveGroups, totalActiveFiles, totalReclaimable int64
+	ps.db.QueryRowContext(r.Context(), `
+		SELECT COALESCE(SUM(1),0), COALESCE(SUM(file_count),0), COALESCE(SUM(reclaimable_bytes),0)
+		FROM duplicate_groups WHERE status IN ('unresolved','watching_alert')
+	`).Scan(&totalActiveGroups, &totalActiveFiles, &totalReclaimable)
+
 	var total int
 	ps.db.QueryRowContext(r.Context(),
 		"SELECT COUNT(*) FROM duplicate_groups WHERE 1=1"+where,
@@ -249,11 +268,12 @@ func (ps *pageServer) groupsPage(w http.ResponseWriter, r *http.Request) {
 		ORDER BY reclaimable_bytes DESC
 		LIMIT ? OFFSET ?`, queryArgs...)
 
-	var items []groupPageItem
+	var groups []groupWithFiles
+	var groupIDs []int64
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {
-			var g groupPageItem
+			var g groupWithFiles
 			if err := rows.Scan(&g.ID, &g.ContentHash, &g.FileSize, &g.FileCount,
 				&g.ReclaimableBytes, &g.FileType, &g.Status); err != nil {
 				continue
@@ -263,11 +283,48 @@ func (ps *pageServer) groupsPage(w http.ResponseWriter, r *http.Request) {
 			} else {
 				g.HashShort = g.ContentHash
 			}
-			items = append(items, g)
+			g.DisplayName = g.HashShort + "…" // fallback until files are loaded
+			groups = append(groups, g)
+			groupIDs = append(groupIDs, g.ID)
 		}
 	}
-	if items == nil {
-		items = []groupPageItem{}
+	if groups == nil {
+		groups = []groupWithFiles{}
+	}
+
+	// Batch-load files for all groups on this page.
+	if len(groupIDs) > 0 {
+		placeholders := strings.Repeat("?,", len(groupIDs))
+		placeholders = placeholders[:len(placeholders)-1]
+		fargs := make([]interface{}, len(groupIDs))
+		for i, id := range groupIDs {
+			fargs[i] = id
+		}
+		fileRows, ferr := ps.db.QueryContext(r.Context(),
+			"SELECT group_id, id, path, size, mtime, file_type FROM duplicate_files "+
+				"WHERE group_id IN ("+placeholders+") ORDER BY group_id, path",
+			fargs...)
+		if ferr == nil {
+			defer fileRows.Close()
+			byGroup := make(map[int64][]groupFileItem, len(groupIDs))
+			for fileRows.Next() {
+				var gid int64
+				var f groupFileItem
+				var mtime int64
+				if err := fileRows.Scan(&gid, &f.ID, &f.Path, &f.Size, &mtime, &f.FileType); err != nil {
+					continue
+				}
+				f.MTime = time.Unix(mtime, 0).Format("2006-01-02 15:04")
+				byGroup[gid] = append(byGroup[gid], f)
+			}
+			for i, g := range groups {
+				files := byGroup[g.ID]
+				groups[i].Files = files
+				if len(files) > 0 {
+					groups[i].DisplayName = filepath.Base(files[0].Path)
+				}
+			}
+		}
 	}
 
 	hasNext := offset+pageLimit < total
@@ -279,17 +336,20 @@ func (ps *pageServer) groupsPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ps.renderTemplate(w, "groups.html", groupsPageData{
-		baseData:     flashFromQuery(r),
-		Items:        items,
-		Total:        total,
-		Limit:        pageLimit,
-		Offset:       offset,
-		StatusFilter: statusFilter,
-		TypeFilter:   typeFilter,
-		NextOffset:   nextOffset,
-		PrevOffset:   prevOffset,
-		HasNext:      hasNext,
-		HasPrev:      hasPrev,
+		baseData:          flashFromQuery(r),
+		Groups:            groups,
+		Total:             total,
+		Limit:             pageLimit,
+		Offset:            offset,
+		StatusFilter:      statusFilter,
+		TypeFilter:        typeFilter,
+		NextOffset:        nextOffset,
+		PrevOffset:        prevOffset,
+		HasNext:           hasNext,
+		HasPrev:           hasPrev,
+		TotalActiveGroups: totalActiveGroups,
+		TotalActiveFiles:  totalActiveFiles,
+		TotalReclaimable:  totalReclaimable,
 	})
 }
 
@@ -336,6 +396,11 @@ func (ps *pageServer) groupDetailPage(w http.ResponseWriter, r *http.Request) {
 	}
 	if files == nil {
 		files = []groupFileItem{}
+	}
+	if len(files) > 0 {
+		g.DisplayName = filepath.Base(files[0].Path)
+	} else {
+		g.DisplayName = g.HashShort + "…"
 	}
 
 	ps.renderTemplate(w, "group_detail.html", groupDetailData{
@@ -493,11 +558,6 @@ func (ps *pageServer) uiGroupDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	r.ParseForm()
 	keeperIDStr := r.FormValue("keeper_id")
-	keeperID, err := strconv.ParseInt(keeperIDStr, 10, 64)
-	if err != nil {
-		uiRedirect(w, r, "/groups-ui/"+idStr, "error", "Please select a file to keep")
-		return
-	}
 
 	var contentHash string
 	var fileSize int64
@@ -530,21 +590,51 @@ func (ps *pageServer) uiGroupDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	fileRows.Close()
 
+	// Build the delete list from whichever mode was submitted.
+	// Mode A (keep-one): keeper_id is set — delete everything else.
+	// Mode B (select): delete_file_ids[] contains the IDs to remove.
 	var deleteIDs []int64
-	for id := range allFiles {
-		if id != keeperID {
-			deleteIDs = append(deleteIDs, id)
+	keeperID := int64(-1) // -1 means no explicit keeper (select-to-delete mode)
+	if keeperIDStr != "" {
+		// keep-one mode: delete all except the keeper
+		var parseErr error
+		keeperID, parseErr = strconv.ParseInt(keeperIDStr, 10, 64)
+		if parseErr != nil {
+			uiRedirect(w, r, "/groups-ui/"+idStr, "error", "Invalid keeper selection")
+			return
+		}
+		for id := range allFiles {
+			if id != keeperID {
+				deleteIDs = append(deleteIDs, id)
+			}
+		}
+	} else {
+		// select-to-delete mode: use the checked IDs
+		for _, s := range r.Form["delete_file_ids"] {
+			id, err := strconv.ParseInt(s, 10, 64)
+			if err == nil {
+				deleteIDs = append(deleteIDs, id)
+			}
 		}
 	}
 	if len(deleteIDs) == 0 {
-		uiRedirect(w, r, "/groups-ui/"+idStr, "error", "No files to delete")
+		uiRedirect(w, r, "/groups-ui/"+idStr, "error", "No files selected for deletion")
+		return
+	}
+	if len(deleteIDs) >= len(allFiles) {
+		uiRedirect(w, r, "/groups-ui/"+idStr, "error", "At least one file must be kept")
 		return
 	}
 
 	// Validate files on disk.
+	// Build a set of IDs being deleted for O(1) lookup.
+	deleteSet := make(map[int64]bool, len(deleteIDs))
+	for _, id := range deleteIDs {
+		deleteSet[id] = true
+	}
 	for fid, f := range allFiles {
 		info, statErr := os.Stat(f.Path)
-		if fid != keeperID {
+		if deleteSet[fid] {
 			if os.IsNotExist(statErr) {
 				uiRedirect(w, r, "/groups-ui/"+idStr, "error", "File missing: "+f.Path+". Please re-scan.")
 				return
@@ -553,7 +643,7 @@ func (ps *pageServer) uiGroupDelete(w http.ResponseWriter, r *http.Request) {
 				uiRedirect(w, r, "/groups-ui/"+idStr, "error", "File modified: "+f.Path+". Please re-scan.")
 				return
 			}
-		} else {
+		} else if keeperID == fid {
 			if os.IsNotExist(statErr) {
 				uiRedirect(w, r, "/groups-ui/"+idStr, "error", "Keeper missing: "+f.Path+". Please re-scan.")
 				return

@@ -4,7 +4,23 @@
   <!-- Header -->
   <div class="flex items-center justify-between">
     <h1 class="text-2xl font-semibold text-gray-900">Duplicate Groups</h1>
-    <span class="text-sm text-gray-500">{{.Total}} groups</span>
+    <span class="text-sm text-gray-500">{{.Total}} matching</span>
+  </div>
+
+  <!-- Stats row -->
+  <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    <div class="bg-white rounded-lg shadow p-5">
+      <p class="text-xs text-gray-500 uppercase tracking-wide">Active Groups</p>
+      <p class="text-3xl font-bold text-indigo-600 mt-1">{{.TotalActiveGroups}}</p>
+    </div>
+    <div class="bg-white rounded-lg shadow p-5">
+      <p class="text-xs text-gray-500 uppercase tracking-wide">Duplicate Files</p>
+      <p class="text-3xl font-bold text-indigo-600 mt-1">{{.TotalActiveFiles}}</p>
+    </div>
+    <div class="bg-white rounded-lg shadow p-5">
+      <p class="text-xs text-gray-500 uppercase tracking-wide">Reclaimable Space</p>
+      <p class="text-3xl font-bold text-indigo-600 mt-1">{{humanBytes .TotalReclaimable}}</p>
+    </div>
   </div>
 
   <!-- Filters -->
@@ -12,82 +28,163 @@
     <select name="status"
       class="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
       <option value="">Active</option>
-      <option value="all" {{if eq .StatusFilter "all"}}selected{{end}}>All</option>
-      <option value="ignored" {{if eq .StatusFilter "ignored"}}selected{{end}}>Ignored</option>
+      <option value="all"      {{if eq .StatusFilter "all"}}selected{{end}}>All</option>
+      <option value="ignored"  {{if eq .StatusFilter "ignored"}}selected{{end}}>Ignored</option>
       <option value="resolved" {{if eq .StatusFilter "resolved"}}selected{{end}}>Resolved</option>
       <option value="watching" {{if eq .StatusFilter "watching"}}selected{{end}}>Watching</option>
     </select>
     <select name="type"
       class="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
       <option value="">All types</option>
-      <option value="image" {{if eq .TypeFilter "image"}}selected{{end}}>Images</option>
-      <option value="video" {{if eq .TypeFilter "video"}}selected{{end}}>Videos</option>
+      <option value="image"    {{if eq .TypeFilter "image"}}selected{{end}}>Images</option>
+      <option value="video"    {{if eq .TypeFilter "video"}}selected{{end}}>Videos</option>
       <option value="document" {{if eq .TypeFilter "document"}}selected{{end}}>Documents</option>
-      <option value="other" {{if eq .TypeFilter "other"}}selected{{end}}>Other</option>
+      <option value="other"    {{if eq .TypeFilter "other"}}selected{{end}}>Other</option>
     </select>
     <button type="submit"
       class="px-3 py-1.5 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700">
       Filter
     </button>
     {{if or .StatusFilter .TypeFilter}}
-    <a href="/groups-ui" class="text-sm text-gray-500 hover:text-gray-700">Clear</a>
+    <a href="/groups-ui" class="text-sm text-gray-400 hover:text-gray-600">Clear</a>
     {{end}}
   </form>
 
-  {{if .Items}}
-  <!-- Groups table -->
-  <div class="bg-white shadow rounded-lg overflow-hidden">
-    <table class="min-w-full divide-y divide-gray-200">
-      <thead class="bg-gray-50">
-        <tr>
-          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hash</th>
-          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Files</th>
-          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Size each</th>
-          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reclaimable</th>
-          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-          <th class="px-4 py-3"></th>
-        </tr>
-      </thead>
-      <tbody class="divide-y divide-gray-200 bg-white">
-        {{range .Items}}
-        <tr class="hover:bg-gray-50">
-          <td class="px-4 py-3 font-mono text-xs text-gray-600">{{.HashShort}}...</td>
-          <td class="px-4 py-3">
-            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700">{{.FileType}}</span>
-          </td>
-          <td class="px-4 py-3 text-sm text-gray-700">{{.FileCount}}</td>
-          <td class="px-4 py-3 text-sm text-gray-700">{{humanBytes .FileSize}}</td>
-          <td class="px-4 py-3 text-sm font-semibold text-indigo-700">{{humanBytes .ReclaimableBytes}}</td>
-          <td class="px-4 py-3">
-            {{if eq .Status "unresolved"}}
-            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">unresolved</span>
-            {{else if eq .Status "watching_alert"}}
-            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-800">alert</span>
-            {{else if eq .Status "watching"}}
-            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">watching</span>
-            {{else if eq .Status "ignored"}}
-            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-500">ignored</span>
-            {{else if eq .Status "resolved"}}
-            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">resolved</span>
-            {{else}}
-            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">{{.Status}}</span>
-            {{end}}
-          </td>
-          <td class="px-4 py-3 text-right">
-            <a href="/groups-ui/{{.ID}}"
-              class="text-indigo-600 hover:text-indigo-800 text-sm font-medium">View &rarr;</a>
-          </td>
-        </tr>
-        {{end}}
-      </tbody>
-    </table>
+  {{if .Groups}}
+  <!-- Group cards -->
+  <div class="space-y-4">
+    {{range .Groups}}
+    <div class="bg-white shadow rounded-lg overflow-hidden">
+
+      <!-- Card header -->
+      <div class="px-5 py-4">
+        <div class="flex items-start justify-between gap-3 flex-wrap">
+          <div class="min-w-0">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="font-semibold text-gray-900 text-sm">{{.DisplayName}}</span>
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">{{.FileType}}</span>
+              {{if eq .Status "unresolved"}}
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">unresolved</span>
+              {{else if eq .Status "watching_alert"}}
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-800">alert</span>
+              {{else if eq .Status "watching"}}
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">watching</span>
+              {{else if eq .Status "ignored"}}
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-500">ignored</span>
+              {{else if eq .Status "resolved"}}
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">resolved</span>
+              {{end}}
+            </div>
+            <p class="text-xs text-gray-500 mt-1">
+              {{.FileCount}} copies &middot; {{humanBytes .FileSize}} each &middot;
+              <span class="text-indigo-600 font-medium">{{humanBytes .ReclaimableBytes}} reclaimable</span>
+            </p>
+            <p class="text-xs text-gray-300 font-mono mt-0.5" title="{{.ContentHash}}">sha256:{{.HashShort}}&hellip;</p>
+          </div>
+        </div>
+      </div>
+
+      {{if eq .Status "unresolved"}}
+      <!-- Mode toggle tabs -->
+      <div class="border-t border-gray-100 flex items-center gap-1 px-5 py-2 bg-gray-50">
+        <button type="button"
+          onclick="switchDeleteMode({{.ID}}, 'keep')"
+          id="tab-keep-{{.ID}}"
+          class="px-3 py-1 text-xs rounded-full bg-indigo-50 text-indigo-700 font-medium">
+          Keep one
+        </button>
+        <button type="button"
+          onclick="switchDeleteMode({{.ID}}, 'select')"
+          id="tab-select-{{.ID}}"
+          class="px-3 py-1 text-xs rounded-full text-gray-500 hover:bg-gray-100">
+          Select to delete
+        </button>
+      </div>
+
+      <!-- Keep-one mode (default visible) -->
+      <div id="mode-keep-{{.ID}}">
+        <form method="POST" action="/ui/groups/{{.ID}}/delete">
+          {{range .Files}}
+          <label class="flex items-start gap-3 px-5 py-2.5 border-t border-gray-50 hover:bg-indigo-50 cursor-pointer">
+            <input type="radio" name="keeper_id" value="{{.ID}}" required
+              class="mt-0.5 h-4 w-4 text-indigo-600 border-gray-300 focus:ring-indigo-500 shrink-0">
+            <span class="min-w-0 flex-1">
+              <span class="font-mono text-xs text-gray-800 block truncate" title="{{.Path}}">{{.Path}}</span>
+              <span class="text-xs text-gray-400">{{humanBytes .Size}} &middot; {{.MTime}}</span>
+            </span>
+          </label>
+          {{end}}
+          <div class="border-t border-gray-100 px-5 py-3 flex items-center gap-3 bg-gray-50">
+            <button type="submit"
+              class="px-3 py-1.5 bg-red-600 text-white text-xs font-semibold rounded-md hover:bg-red-700">
+              Delete Others
+            </button>
+            <span class="text-xs text-gray-400">Select the copy to keep; all others go to trash</span>
+          </div>
+        </form>
+      </div>
+
+      <!-- Select-to-delete mode (hidden by default) -->
+      <div id="mode-select-{{.ID}}" class="hidden">
+        <form method="POST" action="/ui/groups/{{.ID}}/delete">
+          {{range .Files}}
+          <label class="flex items-start gap-3 px-5 py-2.5 border-t border-gray-50 hover:bg-red-50 cursor-pointer">
+            <input type="checkbox" name="delete_file_ids" value="{{.ID}}"
+              class="mt-0.5 h-4 w-4 text-red-600 border-gray-300 rounded focus:ring-red-500 shrink-0">
+            <span class="min-w-0 flex-1">
+              <span class="font-mono text-xs text-gray-800 block truncate" title="{{.Path}}">{{.Path}}</span>
+              <span class="text-xs text-gray-400">{{humanBytes .Size}} &middot; {{.MTime}}</span>
+            </span>
+          </label>
+          {{end}}
+          <div class="border-t border-gray-100 px-5 py-3 flex items-center gap-3 bg-gray-50">
+            <button type="submit"
+              class="px-3 py-1.5 bg-red-600 text-white text-xs font-semibold rounded-md hover:bg-red-700">
+              Delete Selected
+            </button>
+            <span class="text-xs text-gray-400">Checked files go to trash; unchecked are kept</span>
+          </div>
+        </form>
+      </div>
+
+      <!-- Ignore actions -->
+      <div class="border-t border-gray-200 px-5 py-3 flex items-center gap-3 flex-wrap">
+        <span class="text-xs text-gray-400">Ignore:</span>
+        <form method="POST" action="/ui/groups/{{.ID}}/ignore" class="inline">
+          <input type="hidden" name="type" value="hash">
+          <button type="submit" class="text-xs text-gray-500 hover:text-indigo-600 underline underline-offset-2">
+            by content hash
+          </button>
+        </form>
+        <span class="text-gray-200 text-xs">&middot;</span>
+        <form method="POST" action="/ui/groups/{{.ID}}/ignore" class="inline">
+          <input type="hidden" name="type" value="path_pair">
+          <button type="submit" class="text-xs text-gray-500 hover:text-indigo-600 underline underline-offset-2">
+            watch these paths
+          </button>
+        </form>
+      </div>
+
+      {{else}}
+      <!-- Read-only file list for non-actionable statuses -->
+      {{range .Files}}
+      <div class="flex items-center gap-3 px-5 py-2.5 border-t border-gray-50 hover:bg-gray-50">
+        <span class="font-mono text-xs text-gray-600 flex-1 truncate" title="{{.Path}}">{{.Path}}</span>
+        <span class="text-xs text-gray-400 whitespace-nowrap">{{humanBytes .Size}}</span>
+        <span class="text-xs text-gray-400 whitespace-nowrap">{{.MTime}}</span>
+      </div>
+      {{end}}
+      {{end}}
+
+    </div>
+    {{end}}
   </div>
 
   <!-- Pagination -->
+  {{if or .HasPrev .HasNext}}
   <div class="flex items-center justify-between text-sm">
     <span class="text-gray-500">
-      Showing {{add .Offset 1}}&ndash;{{add .Offset (len .Items)}} of {{.Total}}
+      Showing {{add .Offset 1}}&ndash;{{add .Offset (len .Groups)}} of {{.Total}}
     </span>
     <div class="flex gap-2">
       {{if .HasPrev}}
@@ -100,6 +197,7 @@
       {{end}}
     </div>
   </div>
+  {{end}}
 
   {{else}}
   <div class="bg-white shadow rounded-lg p-12 text-center">
@@ -109,4 +207,21 @@
   {{end}}
 
 </div>
+
+<script>
+function switchDeleteMode(groupId, mode) {
+  var keepDiv   = document.getElementById('mode-keep-'   + groupId);
+  var selDiv    = document.getElementById('mode-select-' + groupId);
+  var tabKeep   = document.getElementById('tab-keep-'    + groupId);
+  var tabSelect = document.getElementById('tab-select-'  + groupId);
+
+  keepDiv.classList.toggle('hidden',  mode !== 'keep');
+  selDiv.classList.toggle('hidden',   mode !== 'select');
+
+  var on  = 'px-3 py-1 text-xs rounded-full bg-indigo-50 text-indigo-700 font-medium';
+  var off = 'px-3 py-1 text-xs rounded-full text-gray-500 hover:bg-gray-100';
+  tabKeep.className   = mode === 'keep'   ? on : off;
+  tabSelect.className = mode === 'select' ? on : off;
+}
+</script>
 {{end}}
