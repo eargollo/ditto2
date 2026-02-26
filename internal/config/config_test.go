@@ -32,8 +32,16 @@ func TestLoad_DefaultsApplied(t *testing.T) {
 }
 
 func TestLoad_MissingFile(t *testing.T) {
-	_, err := config.Load("/nonexistent/path/config.yaml")
-	if err == nil {
-		t.Error("expected error for missing file")
+	// A missing config file is not an error — Load returns defaults so the
+	// server can start without a mounted config file (bare Docker run).
+	cfg, err := config.Load("/nonexistent/path/config.yaml")
+	if err != nil {
+		t.Fatalf("expected no error for missing file, got: %v", err)
+	}
+	if cfg.HTTPAddr == "" {
+		t.Error("expected default http_addr to be set")
+	}
+	if cfg.Schedule == "" {
+		t.Error("expected default schedule to be set")
 	}
 }
