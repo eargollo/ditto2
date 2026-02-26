@@ -40,6 +40,7 @@ type HashedFile struct {
 // Config holds pipeline concurrency tuning parameters.
 type Config struct {
 	Walkers        int
+	CacheCheckers  int
 	PartialHashers int
 	FullHashers    int
 	BatchSize      int
@@ -49,6 +50,7 @@ type Config struct {
 func DefaultConfig() Config {
 	return Config{
 		Walkers:        4,
+		CacheCheckers:  4,
 		PartialHashers: 4,
 		FullHashers:    2,
 		BatchSize:      1000,
@@ -135,15 +137,24 @@ func (s *Scanner) runPipeline(ctx context.Context, scanID int64, progress *Progr
 		excludes[p] = struct{}{}
 	}
 
-	const bufSize = 1000
-	walkOut     := make(chan FileInfo, bufSize)
-	candidates  := make(chan FileInfo, bufSize)
-	cacheHits   := make(chan HashedFile, bufSize)
-	cacheMisses := make(chan FileInfo, bufSize)
-	partialOut  := make(chan HashedFile, bufSize)
-	filteredOut := make(chan HashedFile, bufSize)
-	fullOut     := make(chan HashedFile, bufSize)
-	finalOut    := make(chan HashedFile, bufSize)
+	// walkOut is large so walkers can run far ahead of the hashing pipeline,
+	// decoupling walk throughput from hash throughput (~48 MB for 1M FileInfos).
+	// Downstream channels are proportionally smaller — only ~42 % of walked
+	// files become candidates, and the full-hash stage is the bottleneck.
+	const (
+		walkBufSize     = 1_000_000
+		pipelineBufSize = 100_000
+		finalBufSize    = 10_000
+	)
+	walkOut     := make(chan FileInfo, walkBufSize)
+	candidates  := make(chan FileInfo, pipelineBufSize)
+	cacheHits   := make(chan HashedFile, pipelineBufSize)
+	cacheMisses := make(chan FileInfo, pipelineBufSize)
+	partialOut  := make(chan HashedFile, pipelineBufSize)
+	filteredOut := make(chan HashedFile, pipelineBufSize)
+	priorityOut := make(chan HashedFile, finalBufSize)
+	fullOut     := make(chan HashedFile, finalBufSize)
+	finalOut    := make(chan HashedFile, finalBufSize)
 
 	// Wire the error reporter: logs warnings and persists to scan_errors.
 	report := newErrorReporter(s.db, scanID, progress)
@@ -151,10 +162,13 @@ func (s *Scanner) runPipeline(ctx context.Context, scanID int64, progress *Progr
 	// Start pipeline stages (each manages its own goroutine(s)).
 	go Walk(ctx, s.roots, excludes, s.cfg.Walkers, walkOut, report)
 	RunSizeAccumulator(ctx, progress, walkOut, candidates)
-	RunCacheCheck(ctx, s.db, progress, candidates, cacheHits, cacheMisses)
+	RunCacheCheck(ctx, s.db, progress, s.cfg.CacheCheckers, candidates, cacheHits, cacheMisses)
 	RunPartialHashers(ctx, s.cfg.PartialHashers, progress, cacheMisses, partialOut, report)
 	RunPartialHashGrouper(ctx, partialOut, filteredOut)
-	RunFullHashers(ctx, s.cfg.FullHashers, progress, filteredOut, fullOut, report)
+	// Sort by ascending size so small files are fully hashed first — maximises
+	// early cache population and keeps full-hasher slots busy with short jobs.
+	RunSizePriorityQueue(ctx, filteredOut, priorityOut)
+	RunFullHashers(ctx, s.cfg.FullHashers, progress, priorityOut, fullOut, report)
 	mergeHashedFiles(ctx, cacheHits, fullOut, finalOut)
 
 	// Progress reporter — flushes counters to DB every second.

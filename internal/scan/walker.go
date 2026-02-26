@@ -20,6 +20,7 @@ type dirQueue struct {
 	mu      sync.Mutex
 	cond    *sync.Cond
 	items   []string
+	head    int // index of the next item to pop; avoids O(n) re-slicing
 	pending atomic.Int64
 	closed  bool
 }
@@ -43,14 +44,21 @@ func (q *dirQueue) Push(dir string) {
 func (q *dirQueue) Pop() (string, bool) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	for len(q.items) == 0 && !q.closed {
+	for q.head >= len(q.items) && !q.closed {
 		q.cond.Wait()
 	}
-	if len(q.items) == 0 {
+	if q.head >= len(q.items) {
 		return "", false
 	}
-	item := q.items[0]
-	q.items = q.items[1:]
+	item := q.items[q.head]
+	q.items[q.head] = "" // release string reference so GC can collect it
+	q.head++
+	// Compact when we've consumed at least 1 000 items and head has passed
+	// the midpoint — keeps the backing array from growing without bound.
+	if q.head >= 1000 && q.head >= len(q.items)/2 {
+		q.items = append(q.items[:0], q.items[q.head:]...)
+		q.head = 0
+	}
 	return item, true
 }
 

@@ -26,6 +26,7 @@ type Config struct {
 // ScanWorkers holds concurrency knobs for the scan pipeline.
 type ScanWorkers struct {
 	Walkers        int `yaml:"walkers"         json:"walkers"`
+	CacheCheckers  int `yaml:"cache_checkers"  json:"cache_checkers"`
 	PartialHashers int `yaml:"partial_hashers" json:"partial_hashers"`
 	FullHashers    int `yaml:"full_hashers"    json:"full_hashers"`
 }
@@ -49,6 +50,9 @@ func (c *Config) applyDefaults() {
 	}
 	if c.ScanWorkers.Walkers == 0 {
 		c.ScanWorkers.Walkers = 4
+	}
+	if c.ScanWorkers.CacheCheckers == 0 {
+		c.ScanWorkers.CacheCheckers = 4
 	}
 	if c.ScanWorkers.PartialHashers == 0 {
 		c.ScanWorkers.PartialHashers = 4
@@ -119,6 +123,11 @@ func MergeDBSettings(cfg *Config, settings map[string]string) {
 	if v, ok := settings["walkers"]; ok && v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			cfg.ScanWorkers.Walkers = n
+		}
+	}
+	if v, ok := settings["cache_checkers"]; ok && v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.ScanWorkers.CacheCheckers = n
 		}
 	}
 	if v, ok := settings["partial_hashers"]; ok && v != "" {

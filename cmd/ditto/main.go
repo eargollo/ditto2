@@ -73,6 +73,7 @@ func main() {
 	// ── Scan manager ───────────────────────────────────────────────────────
 	scanCfg := scan.Config{
 		Walkers:        cfg.ScanWorkers.Walkers,
+		CacheCheckers:  cfg.ScanWorkers.CacheCheckers,
 		PartialHashers: cfg.ScanWorkers.PartialHashers,
 		FullHashers:    cfg.ScanWorkers.FullHashers,
 		BatchSize:      1000,

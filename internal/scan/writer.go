@@ -20,34 +20,53 @@ type WriteStats struct {
 
 // RunDBWriter collects all HashedFile results from in, then writes duplicate
 // groups and files to the database in batched transactions.
-// It also updates the file_cache for all files that passed through the
-// pipeline (enabling incremental re-scans).
+// It updates file_cache progressively (every batchSize items) so that a
+// cancelled scan still preserves partial hashing work for subsequent runs.
 // Returns aggregate stats for updating scan_history.
 func RunDBWriter(ctx context.Context, db *sql.DB, scanID int64, batchSize int, in <-chan HashedFile) (WriteStats, error) {
 	// Phase 1: accumulate all results into a map keyed by full hash.
+	// Write file_cache entries progressively so cancelled scans preserve work.
 	groups := make(map[string][]HashedFile)
+	var cacheBuf []HashedFile
+
+	flushCache := func() {
+		if len(cacheBuf) == 0 {
+			return
+		}
+		// Use Background so the flush survives context cancellation.
+		if err := updateCache(context.Background(), db, scanID, cacheBuf, batchSize); err != nil {
+			slog.Warn("progressive cache update failed", "error", err)
+		}
+		cacheBuf = cacheBuf[:0]
+	}
+
 	for hf := range in {
 		groups[hf.Hash] = append(groups[hf.Hash], hf)
+		cacheBuf = append(cacheBuf, hf)
+		if len(cacheBuf) >= batchSize {
+			flushCache()
+		}
 	}
+
+	// Always flush remaining entries — even when the scan was cancelled.
+	flushCache()
+
 	if ctx.Err() != nil {
 		return WriteStats{}, ctx.Err()
 	}
 
-	// Phase 2: write to the database.
+	// Phase 2: write duplicate groups to the database.
 	return persistGroups(ctx, db, scanID, batchSize, groups)
 }
 
-// persistGroups writes duplicate groups and files to the DB and updates the
-// file_cache. Groups with fewer than 2 files are still cached but not written
-// as duplicates.
+// persistGroups writes duplicate groups and files to the DB.
+// file_cache is updated progressively by RunDBWriter; this function only
+// handles duplicate group detection and persistence.
 func persistGroups(ctx context.Context, db *sql.DB, scanID int64, batchSize int, groups map[string][]HashedFile) (WriteStats, error) {
 	var stats WriteStats
 	now := time.Now().Unix()
 
-	// Collect all files for cache update (regardless of duplicate status).
-	var allFiles []HashedFile
 	for _, files := range groups {
-		allFiles = append(allFiles, files...)
 		stats.FilesHashed += int64(len(files))
 	}
 
@@ -110,13 +129,6 @@ func persistGroups(ctx context.Context, db *sql.DB, scanID int64, batchSize int,
 		stats.DuplicateGroups++
 		stats.DuplicateFiles += int64(len(files))
 		stats.ReclaimableBytes += reclaimable
-	}
-
-	// ── Update file_cache ─────────────────────────────────────────────────
-	if err := updateCache(ctx, db, scanID, allFiles, batchSize); err != nil {
-		// Non-fatal: cache update failure degrades next-scan performance but
-		// doesn't corrupt duplicate results.
-		slog.Warn("file_cache update failed", "error", err)
 	}
 
 	return stats, nil
