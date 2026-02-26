@@ -12,7 +12,7 @@
     </form>
   </div>
 
-  <!-- Stats cards -->
+  <!-- Active state cards -->
   <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
     <div class="bg-white rounded-lg shadow p-6">
       <p class="text-sm text-gray-500">Active Duplicate Groups</p>
@@ -28,6 +28,30 @@
     </div>
   </div>
 
+  <!-- Deletion activity cards -->
+  <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+    <div class="bg-white rounded-lg shadow p-5">
+      <p class="text-xs text-gray-500 uppercase tracking-wide">Files Deleted</p>
+      <p class="text-2xl font-bold text-emerald-600 mt-1">{{.DeletedAllTime}}</p>
+      <p class="text-xs text-gray-400 mt-0.5">all time</p>
+    </div>
+    <div class="bg-white rounded-lg shadow p-5">
+      <p class="text-xs text-gray-500 uppercase tracking-wide">Space Reclaimed</p>
+      <p class="text-2xl font-bold text-emerald-600 mt-1">{{humanBytes .ReclaimedAllTime}}</p>
+      <p class="text-xs text-gray-400 mt-0.5">all time</p>
+    </div>
+    <div class="bg-white rounded-lg shadow p-5">
+      <p class="text-xs text-gray-500 uppercase tracking-wide">Files Deleted</p>
+      <p class="text-2xl font-bold text-emerald-500 mt-1">{{.Deleted30d}}</p>
+      <p class="text-xs text-gray-400 mt-0.5">last 30 days</p>
+    </div>
+    <div class="bg-white rounded-lg shadow p-5">
+      <p class="text-xs text-gray-500 uppercase tracking-wide">Space Reclaimed</p>
+      <p class="text-2xl font-bold text-emerald-500 mt-1">{{humanBytes .Reclaimed30d}}</p>
+      <p class="text-xs text-gray-400 mt-0.5">last 30 days</p>
+    </div>
+  </div>
+
   <!-- Scan status (HTMX polled every 3s) -->
   <div class="bg-white rounded-lg shadow p-6">
     <h2 class="text-sm font-semibold text-gray-700 mb-3">Scan Status</h2>
@@ -39,5 +63,150 @@
     </div>
   </div>
 
+  <!-- Trend charts (shown when >= 3 scans have completed) -->
+  {{if ge (len .Snapshots) 3}}
+  <div class="bg-white rounded-lg shadow p-6">
+    <h2 class="text-sm font-semibold text-gray-700 mb-4">Trends</h2>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
+      <div>
+        <p class="text-xs text-gray-500 uppercase tracking-wide mb-2">Duplicate Groups</p>
+        <canvas id="chartGroups" height="120"></canvas>
+      </div>
+      <div>
+        <p class="text-xs text-gray-500 uppercase tracking-wide mb-2">Reclaimable Space</p>
+        <canvas id="chartReclaimable" height="120"></canvas>
+      </div>
+      <div>
+        <p class="text-xs text-gray-500 uppercase tracking-wide mb-2">Cumulative Reclaimed</p>
+        <canvas id="chartReclaimed" height="120"></canvas>
+      </div>
+    </div>
+  </div>
+  {{end}}
+
+  <!-- Recent scan history -->
+  {{if .RecentScans}}
+  <div class="bg-white rounded-lg shadow overflow-hidden">
+    <div class="px-6 py-4 border-b border-gray-200">
+      <h2 class="text-sm font-semibold text-gray-700">Recent Scans</h2>
+    </div>
+    <table class="min-w-full divide-y divide-gray-200 text-sm">
+      <thead class="bg-gray-50">
+        <tr>
+          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Duration</th>
+          <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Files</th>
+          <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Groups</th>
+          <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Reclaimable</th>
+          <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Errors</th>
+          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100">
+        {{range .RecentScans}}
+        <tr class="hover:bg-gray-50">
+          <td class="px-4 py-2.5 text-gray-700 whitespace-nowrap">
+            {{.StartedAt}}
+            <span class="ml-1 text-xs text-gray-400">{{.TriggeredBy}}</span>
+          </td>
+          <td class="px-4 py-2.5 text-gray-600 whitespace-nowrap">{{.Duration}}</td>
+          <td class="px-4 py-2.5 text-gray-600 text-right">{{.FilesDiscovered}}</td>
+          <td class="px-4 py-2.5 text-gray-600 text-right">{{.DuplicateGroups}}</td>
+          <td class="px-4 py-2.5 text-gray-600 text-right">{{humanBytes .ReclaimableBytes}}</td>
+          <td class="px-4 py-2.5 text-right">
+            {{if gt .ErrorCount 0}}
+            <span class="text-red-600 font-medium">{{.ErrorCount}}</span>
+            {{else}}
+            <span class="text-gray-400">—</span>
+            {{end}}
+          </td>
+          <td class="px-4 py-2.5">
+            {{if eq .Status "completed"}}
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">completed</span>
+            {{else if eq .Status "failed"}}
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">failed</span>
+            {{else}}
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">{{.Status}}</span>
+            {{end}}
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{end}}
+
 </div>
+
+{{if ge (len .Snapshots) 3}}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+(function() {
+  const snaps = {{json .Snapshots}};
+  const labels = snaps.map(s => s.Date);
+
+  function humanBytes(n) {
+    if (n < 1024) return n + ' B';
+    const units = ['KB','MB','GB','TB','PB'];
+    let i = -1;
+    do { n /= 1024; i++; } while (n >= 1024 && i < units.length - 1);
+    return n.toFixed(1) + ' ' + units[i];
+  }
+
+  const lineDefaults = {
+    type: 'line',
+    options: {
+      responsive: true,
+      animation: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false }, ticks: { maxTicksLimit: 6, font: { size: 10 } } },
+        y: { beginAtZero: true, ticks: { maxTicksLimit: 4, font: { size: 10 } } }
+      },
+      elements: { point: { radius: 2 }, line: { tension: 0.3 } }
+    }
+  };
+
+  new Chart(document.getElementById('chartGroups'), {
+    ...lineDefaults,
+    data: { labels, datasets: [{
+      data: snaps.map(s => s.DuplicateGroups),
+      borderColor: '#6366f1', backgroundColor: 'rgba(99,102,241,0.08)', fill: true,
+    }]}
+  });
+
+  new Chart(document.getElementById('chartReclaimable'), {
+    type: 'line',
+    data: { labels, datasets: [{
+      data: snaps.map(s => s.ReclaimableBytes),
+      borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.08)', fill: true,
+    }]},
+    options: {
+      ...lineDefaults.options,
+      scales: {
+        ...lineDefaults.options.scales,
+        y: { beginAtZero: true, ticks: { maxTicksLimit: 4, font: { size: 10 },
+          callback: v => humanBytes(v) } }
+      }
+    }
+  });
+
+  new Chart(document.getElementById('chartReclaimed'), {
+    type: 'line',
+    data: { labels, datasets: [{
+      data: snaps.map(s => s.CumReclaimed),
+      borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.08)', fill: true,
+    }]},
+    options: {
+      ...lineDefaults.options,
+      scales: {
+        ...lineDefaults.options.scales,
+        y: { beginAtZero: true, ticks: { maxTicksLimit: 4, font: { size: 10 },
+          callback: v => humanBytes(v) } }
+      }
+    }
+  });
+})();
+</script>
+{{end}}
 {{end}}

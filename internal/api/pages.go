@@ -37,6 +37,20 @@ var templateFuncs = template.FuncMap{
 		}
 		return s[:n]
 	},
+	"json": func(v any) template.JS {
+		b, _ := json.Marshal(v)
+		return template.JS(b)
+	},
+}
+
+func formatDuration(secs int64) string {
+	if secs < 60 {
+		return fmt.Sprintf("%ds", secs)
+	}
+	if secs < 3600 {
+		return fmt.Sprintf("%dm %ds", secs/60, secs%60)
+	}
+	return fmt.Sprintf("%dh %dm", secs/3600, (secs%3600)/60)
 }
 
 func humanBytes(n int64) string {
@@ -77,11 +91,40 @@ type scanStatusData struct {
 	NextRunAt       string
 }
 
+type scanHistoryItem struct {
+	ID               int64
+	StartedAt        string
+	Duration         string
+	FilesDiscovered  int64
+	DuplicateGroups  int64
+	ReclaimableBytes int64
+	ErrorCount       int64
+	Status           string
+	TriggeredBy      string
+}
+
+type snapshotPoint struct {
+	Date             string
+	DuplicateGroups  int64
+	ReclaimableBytes int64
+	CumReclaimed     int64
+}
+
 type dashboardData struct {
 	baseData
+	// Current active state
 	Groups      int64
 	Files       int64
 	Reclaimable int64
+	// Deletion history
+	DeletedAllTime   int64
+	ReclaimedAllTime int64
+	Deleted30d       int64
+	Reclaimed30d     int64
+	// Recent scan history
+	RecentScans []scanHistoryItem
+	// Trend chart data (populated when len >= 3)
+	Snapshots []snapshotPoint
 }
 
 type groupPageItem struct {
@@ -208,18 +251,76 @@ func uiRedirect(w http.ResponseWriter, r *http.Request, to, flashType, flashMsg 
 // ── Page handlers ─────────────────────────────────────────────────────────────
 
 func (ps *pageServer) dashboardPage(w http.ResponseWriter, r *http.Request) {
-	var groups, files, reclaimable int64
+	d := dashboardData{baseData: flashFromQuery(r)}
+
+	// Current active groups.
 	ps.db.QueryRowContext(r.Context(), `
 		SELECT COALESCE(SUM(1),0), COALESCE(SUM(file_count),0), COALESCE(SUM(reclaimable_bytes),0)
-		FROM duplicate_groups
-		WHERE status IN ('unresolved','watching_alert')
-	`).Scan(&groups, &files, &reclaimable)
-	ps.renderTemplate(w, "dashboard.html", dashboardData{
-		baseData:    flashFromQuery(r),
-		Groups:      groups,
-		Files:       files,
-		Reclaimable: reclaimable,
-	})
+		FROM duplicate_groups WHERE status IN ('unresolved','watching_alert')
+	`).Scan(&d.Groups, &d.Files, &d.Reclaimable)
+
+	// All-time deletion stats.
+	ps.db.QueryRowContext(r.Context(),
+		`SELECT COUNT(*), COALESCE(SUM(file_size),0) FROM deletion_log`,
+	).Scan(&d.DeletedAllTime, &d.ReclaimedAllTime)
+
+	// Last-30-day deletion stats.
+	since30d := time.Now().Add(-30 * 24 * time.Hour).Unix()
+	ps.db.QueryRowContext(r.Context(),
+		`SELECT COUNT(*), COALESCE(SUM(file_size),0) FROM deletion_log WHERE deleted_at >= ?`,
+		since30d,
+	).Scan(&d.Deleted30d, &d.Reclaimed30d)
+
+	// Recent scan history (last 10 finished scans).
+	scanRows, err := ps.db.QueryContext(r.Context(), `
+		SELECT id, started_at, COALESCE(duration_seconds,0),
+		       files_discovered, duplicate_groups, reclaimable_bytes,
+		       errors, status, triggered_by
+		FROM scan_history
+		WHERE status IN ('completed','failed','cancelled')
+		ORDER BY started_at DESC
+		LIMIT 10`)
+	if err == nil {
+		defer scanRows.Close()
+		for scanRows.Next() {
+			var item scanHistoryItem
+			var startedAt, durSecs int64
+			if err := scanRows.Scan(&item.ID, &startedAt, &durSecs,
+				&item.FilesDiscovered, &item.DuplicateGroups, &item.ReclaimableBytes,
+				&item.ErrorCount, &item.Status, &item.TriggeredBy); err != nil {
+				continue
+			}
+			item.StartedAt = time.Unix(startedAt, 0).Format("Jan 2, 2006 15:04")
+			item.Duration = formatDuration(durSecs)
+			d.RecentScans = append(d.RecentScans, item)
+		}
+	}
+	if d.RecentScans == nil {
+		d.RecentScans = []scanHistoryItem{}
+	}
+
+	// Trend chart snapshots (all, ascending).
+	snapRows, err := ps.db.QueryContext(r.Context(), `
+		SELECT snapshot_at, duplicate_groups, reclaimable_bytes, cumulative_reclaimed_bytes
+		FROM scan_snapshots ORDER BY snapshot_at ASC`)
+	if err == nil {
+		defer snapRows.Close()
+		for snapRows.Next() {
+			var sp snapshotPoint
+			var snapAt int64
+			if err := snapRows.Scan(&snapAt, &sp.DuplicateGroups,
+				&sp.ReclaimableBytes, &sp.CumReclaimed); err != nil {
+				continue
+			}
+			sp.Date = time.Unix(snapAt, 0).Format("Jan 2")
+			d.Snapshots = append(d.Snapshots, sp)
+		}
+	}
+	if d.Snapshots == nil {
+		d.Snapshots = []snapshotPoint{}
+	}
+
+	ps.renderTemplate(w, "dashboard.html", d)
 }
 
 func (ps *pageServer) groupsPage(w http.ResponseWriter, r *http.Request) {
