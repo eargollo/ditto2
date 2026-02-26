@@ -30,6 +30,7 @@ import (
 
 var templateFuncs = template.FuncMap{
 	"humanBytes": humanBytes,
+	"commaN":     commaN,
 	"add":        func(a, b int) int { return a + b },
 	"sub":        func(a, b int) int { return a - b },
 	"base":       filepath.Base,
@@ -53,6 +54,21 @@ func formatDuration(secs int64) string {
 		return fmt.Sprintf("%dm %ds", secs/60, secs%60)
 	}
 	return fmt.Sprintf("%dh %dm", secs/3600, (secs%3600)/60)
+}
+
+func commaN(n int64) string {
+	s := strconv.FormatInt(n, 10)
+	if n < 0 {
+		return "-" + insertCommas(s[1:])
+	}
+	return insertCommas(s)
+}
+
+func insertCommas(s string) string {
+	if len(s) <= 3 {
+		return s
+	}
+	return insertCommas(s[:len(s)-3]) + "," + s[len(s)-3:]
 }
 
 func humanBytes(n int64) string {

@@ -16,11 +16,11 @@
   <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
     <div class="bg-white rounded-lg shadow p-6">
       <p class="text-sm text-gray-500">Active Duplicate Groups</p>
-      <p class="text-3xl font-bold text-indigo-600 mt-1">{{.Groups}}</p>
+      <p class="text-3xl font-bold text-indigo-600 mt-1">{{commaN .Groups}}</p>
     </div>
     <div class="bg-white rounded-lg shadow p-6">
       <p class="text-sm text-gray-500">Duplicate Files</p>
-      <p class="text-3xl font-bold text-indigo-600 mt-1">{{.Files}}</p>
+      <p class="text-3xl font-bold text-indigo-600 mt-1">{{commaN .Files}}</p>
     </div>
     <div class="bg-white rounded-lg shadow p-6">
       <p class="text-sm text-gray-500">Reclaimable Space</p>
@@ -32,7 +32,7 @@
   <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
     <div class="bg-white rounded-lg shadow p-5">
       <p class="text-xs text-gray-500 uppercase tracking-wide">Files Deleted</p>
-      <p class="text-2xl font-bold text-emerald-600 mt-1">{{.DeletedAllTime}}</p>
+      <p class="text-2xl font-bold text-emerald-600 mt-1">{{commaN .DeletedAllTime}}</p>
       <p class="text-xs text-gray-400 mt-0.5">all time</p>
     </div>
     <div class="bg-white rounded-lg shadow p-5">
@@ -42,7 +42,7 @@
     </div>
     <div class="bg-white rounded-lg shadow p-5">
       <p class="text-xs text-gray-500 uppercase tracking-wide">Files Deleted</p>
-      <p class="text-2xl font-bold text-emerald-500 mt-1">{{.Deleted30d}}</p>
+      <p class="text-2xl font-bold text-emerald-500 mt-1">{{commaN .Deleted30d}}</p>
       <p class="text-xs text-gray-400 mt-0.5">last 30 days</p>
     </div>
     <div class="bg-white rounded-lg shadow p-5">
@@ -110,12 +110,12 @@
             <span class="ml-1 text-xs text-gray-400">{{.TriggeredBy}}</span>
           </td>
           <td class="px-4 py-2.5 text-gray-600 whitespace-nowrap">{{.Duration}}</td>
-          <td class="px-4 py-2.5 text-gray-600 text-right">{{.FilesDiscovered}}</td>
-          <td class="px-4 py-2.5 text-gray-600 text-right">{{.DuplicateGroups}}</td>
+          <td class="px-4 py-2.5 text-gray-600 text-right">{{commaN .FilesDiscovered}}</td>
+          <td class="px-4 py-2.5 text-gray-600 text-right">{{commaN .DuplicateGroups}}</td>
           <td class="px-4 py-2.5 text-gray-600 text-right">{{humanBytes .ReclaimableBytes}}</td>
           <td class="px-4 py-2.5 text-right">
             {{if gt .ErrorCount 0}}
-            <span class="text-red-600 font-medium">{{.ErrorCount}}</span>
+            <span class="text-red-600 font-medium">{{commaN .ErrorCount}}</span>
             {{else}}
             <span class="text-gray-400">—</span>
             {{end}}
