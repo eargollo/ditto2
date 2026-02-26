@@ -119,6 +119,8 @@ type scanHistoryItem struct {
 	ErrorCount       int64
 	Status           string
 	TriggeredBy      string
+	CacheHitStr      string // "85%" or "" when no data
+	FilesPerSec      int64  // 0 when no data
 }
 
 type snapshotPoint struct {
@@ -126,6 +128,7 @@ type snapshotPoint struct {
 	DuplicateGroups  int64
 	ReclaimableBytes int64
 	CumReclaimed     int64
+	DurationSeconds  int64
 }
 
 type dashboardData struct {
@@ -306,7 +309,8 @@ func (ps *pageServer) dashboardPage(w http.ResponseWriter, r *http.Request) {
 	scanRows, err := ps.db.QueryContext(r.Context(), `
 		SELECT id, started_at, COALESCE(duration_seconds,0),
 		       files_discovered, duplicate_groups, reclaimable_bytes,
-		       errors, status, triggered_by
+		       errors, status, triggered_by,
+		       cache_hits, cache_misses
 		FROM scan_history
 		WHERE status IN ('completed','failed','cancelled')
 		ORDER BY started_at DESC
@@ -315,14 +319,21 @@ func (ps *pageServer) dashboardPage(w http.ResponseWriter, r *http.Request) {
 		defer scanRows.Close()
 		for scanRows.Next() {
 			var item scanHistoryItem
-			var startedAt, durSecs int64
+			var startedAt, durSecs, cacheHits, cacheMisses int64
 			if err := scanRows.Scan(&item.ID, &startedAt, &durSecs,
 				&item.FilesDiscovered, &item.DuplicateGroups, &item.ReclaimableBytes,
-				&item.ErrorCount, &item.Status, &item.TriggeredBy); err != nil {
+				&item.ErrorCount, &item.Status, &item.TriggeredBy,
+				&cacheHits, &cacheMisses); err != nil {
 				continue
 			}
 			item.StartedAt = time.Unix(startedAt, 0).Format("Jan 2, 2006 15:04")
 			item.Duration = formatDuration(durSecs)
+			if total := cacheHits + cacheMisses; total > 0 {
+				item.CacheHitStr = fmt.Sprintf("%d%%", cacheHits*100/total)
+			}
+			if durSecs > 0 {
+				item.FilesPerSec = item.FilesDiscovered / durSecs
+			}
 			d.RecentScans = append(d.RecentScans, item)
 		}
 	}
@@ -332,15 +343,18 @@ func (ps *pageServer) dashboardPage(w http.ResponseWriter, r *http.Request) {
 
 	// Trend chart snapshots (all, ascending).
 	snapRows, err := ps.db.QueryContext(r.Context(), `
-		SELECT snapshot_at, duplicate_groups, reclaimable_bytes, cumulative_reclaimed_bytes
-		FROM scan_snapshots ORDER BY snapshot_at ASC`)
+		SELECT ss.snapshot_at, ss.duplicate_groups, ss.reclaimable_bytes,
+		       ss.cumulative_reclaimed_bytes, COALESCE(sh.duration_seconds, 0)
+		FROM scan_snapshots ss
+		JOIN scan_history sh ON ss.scan_id = sh.id
+		ORDER BY ss.snapshot_at ASC`)
 	if err == nil {
 		defer snapRows.Close()
 		for snapRows.Next() {
 			var sp snapshotPoint
 			var snapAt int64
 			if err := snapRows.Scan(&snapAt, &sp.DuplicateGroups,
-				&sp.ReclaimableBytes, &sp.CumReclaimed); err != nil {
+				&sp.ReclaimableBytes, &sp.CumReclaimed, &sp.DurationSeconds); err != nil {
 				continue
 			}
 			sp.Date = time.Unix(snapAt, 0).Format("Jan 2")
