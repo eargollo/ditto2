@@ -1,0 +1,24 @@
+services:
+  ditto:
+    image: ghcr.io/eargollo/ditto2:latest
+    container_name: ditto
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      # Persistent data: SQLite database and trash holding area.
+      # Change the host path to any directory on your NAS you want to use.
+      - /volume1/docker/ditto/data:/data
+
+      # Optional: mount a config file to pre-configure scan paths, schedule, etc.
+      # Remove this line to configure everything through the Settings UI instead.
+      - /volume1/docker/ditto/config.yaml:/app/config.yaml:ro
+
+      # Mount the shared folders you want to scan — read-only for safety.
+      # Add one line per shared folder.
+      - /volume1/photos:/volume1/photos:ro
+      - /volume1/documents:/volume1/documents:ro
+      # - /volume2/backup:/volume2/backup:ro
+
+    environment:
+      - TZ=UTC   # change to your timezone, e.g. America/New_York, Europe/London

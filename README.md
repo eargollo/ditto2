@@ -127,6 +127,87 @@ podman machine start
 
 ---
 
+## Synology NAS deployment
+
+Ditto is designed to run as a container on a Synology NAS using
+[Container Manager](https://www.synology.com/en-global/dsm/feature/container-manager)
+(DSM 7.2+). A ready-to-use Compose file and config are in
+[`deploy/synology/`](deploy/synology/).
+
+### Prerequisites
+
+- Synology DSM 7.2+ with Container Manager installed
+- SSH access to the NAS, or use the Container Manager UI
+
+### 1. Create a directory for Ditto on the NAS
+
+SSH into your NAS and create a home for Ditto's files:
+
+```bash
+mkdir -p /volume1/docker/ditto/data
+```
+
+### 2. Copy the Compose file
+
+Either SSH and create the file directly, or use File Station to upload it.
+
+```bash
+# On your NAS (via SSH):
+mkdir -p /volume1/docker/ditto
+curl -fsSL https://raw.githubusercontent.com/eargollo/ditto2/main/deploy/synology/docker-compose.yml \
+  -o /volume1/docker/ditto/docker-compose.yml
+```
+
+Edit the file and adjust the volume mounts to match your shared folders:
+
+```yaml
+volumes:
+  - /volume1/photos:/volume1/photos:ro
+  - /volume1/documents:/volume1/documents:ro
+```
+
+### 3. (Optional) Add a config file
+
+Skip this step if you prefer to configure everything through the Settings UI.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/eargollo/ditto2/main/deploy/synology/config.yaml \
+  -o /volume1/docker/ditto/config.yaml
+```
+
+Edit `scan_paths` to point at the shared folders you want to scan.
+If you skip this, configure scan paths at `http://<nas-ip>:8080` after starting.
+
+### 4. Start the container
+
+```bash
+cd /volume1/docker/ditto
+docker compose up -d
+docker compose logs -f   # watch startup logs
+```
+
+Or in Container Manager UI: **Project → Create → Upload compose file**.
+
+### 5. Open the web UI
+
+```
+http://<nas-ip>:8080
+```
+
+Trigger a manual scan from the dashboard, or wait for the scheduled scan
+(default: Sundays at 2 am). Review duplicate groups and delete or ignore files
+from the Groups page. Files moved to trash are auto-purged after 30 days.
+
+### Updating to a new release
+
+```bash
+cd /volume1/docker/ditto
+docker compose pull
+docker compose up -d
+```
+
+---
+
 ## Development
 
 ### Prerequisites
