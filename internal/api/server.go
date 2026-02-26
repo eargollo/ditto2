@@ -31,6 +31,7 @@ func New(
 	mgr *scan.Manager,
 	trashMgr *trash.Manager,
 	sched *scheduler.Scheduler,
+	version string,
 	templatesFS fs.FS,
 	staticFS fs.FS,
 ) *Server {
@@ -39,7 +40,7 @@ func New(
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.RequestID)
 
-	statusH := &handlers.StatusHandler{DB: db, Manager: mgr, Sched: sched}
+	statusH := &handlers.StatusHandler{DB: db, Manager: mgr, Sched: sched, Version: version}
 	scansH := &handlers.ScansHandler{DB: db, Manager: mgr}
 	groupsH := &handlers.GroupsHandler{
 		DB:      db,
@@ -90,11 +91,13 @@ func New(
 			cfg:         cfg,
 			sched:       sched,
 			templatesFS: templatesFS,
+			cfgH:        configH,
 		}
 		r.Get("/", ps.dashboardPage)
 		r.Get("/groups-ui", ps.groupsPage)
 		r.Get("/groups-ui/{id}", ps.groupDetailPage)
 		r.Get("/trash-ui", ps.trashPage)
+		r.Get("/settings-ui", ps.settingsPage)
 
 		// Fragment endpoints (HTMX polling)
 		r.Get("/ui/scan-status", ps.scanStatusFragment)
@@ -106,6 +109,7 @@ func New(
 		r.Post("/ui/groups/{id}/ignore", ps.uiGroupIgnore)
 		r.Post("/ui/trash/{id}/restore", ps.uiTrashRestore)
 		r.Post("/ui/trash/purge", ps.uiTrashPurge)
+		r.Post("/ui/settings", ps.uiSettingsSave)
 	}
 
 	return &Server{

@@ -15,9 +15,11 @@ type StatusHandler struct {
 	DB      *sql.DB
 	Manager *scan.Manager
 	Sched   *scheduler.Scheduler
+	Version string
 }
 
 type statusResponse struct {
+	Version           string             `json:"version"`
 	ActiveScan        *activeScanInfo    `json:"active_scan"`
 	Schedule          scheduleInfo       `json:"schedule"`
 	LastCompletedScan *completedScanInfo `json:"last_completed_scan"`
@@ -60,6 +62,7 @@ type completedScanInfo struct {
 // ServeHTTP returns the system status as JSON.
 func (h *StatusHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	resp := statusResponse{
+		Version:           h.Version,
 		ActiveScan:        h.activeScan(),
 		Schedule:          h.schedule(),
 		LastCompletedScan: h.lastCompletedScan(),

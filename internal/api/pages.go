@@ -19,6 +19,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/eargollo/ditto/internal/api/handlers"
 	"github.com/eargollo/ditto/internal/config"
 	"github.com/eargollo/ditto/internal/scan"
 	"github.com/eargollo/ditto/internal/scheduler"
@@ -199,6 +200,18 @@ type trashPageData struct {
 	HasPrev    bool
 }
 
+type settingsPageData struct {
+	baseData
+	ScanPaths          string
+	ExcludePaths       string
+	Schedule           string
+	ScanPaused         bool
+	TrashRetentionDays int
+	Walkers            int
+	PartialHashers     int
+	FullHashers        int
+}
+
 // ── pageServer ────────────────────────────────────────────────────────────────
 
 type pageServer struct {
@@ -208,6 +221,7 @@ type pageServer struct {
 	cfg         *config.Config
 	sched       *scheduler.Scheduler
 	templatesFS fs.FS
+	cfgH        *handlers.ConfigHandler
 }
 
 func (ps *pageServer) renderTemplate(w http.ResponseWriter, pageName string, data any) {
@@ -895,4 +909,94 @@ func (ps *pageServer) uiTrashPurge(w http.ResponseWriter, r *http.Request) {
 	}
 	uiRedirect(w, r, "/trash-ui", "success",
 		fmt.Sprintf("Purged %d files, freed %s", count, humanBytes(bytesFreed)))
+}
+
+func (ps *pageServer) settingsPage(w http.ResponseWriter, r *http.Request) {
+	d := settingsPageData{
+		baseData:           flashFromQuery(r),
+		ScanPaths:          strings.Join(ps.cfg.ScanPaths, "\n"),
+		ExcludePaths:       strings.Join(ps.cfg.ExcludePaths, "\n"),
+		Schedule:           ps.cfg.Schedule,
+		ScanPaused:         ps.cfg.ScanPaused,
+		TrashRetentionDays: ps.cfg.TrashRetentionDays,
+		Walkers:            ps.cfg.ScanWorkers.Walkers,
+		PartialHashers:     ps.cfg.ScanWorkers.PartialHashers,
+		FullHashers:        ps.cfg.ScanWorkers.FullHashers,
+	}
+	ps.renderTemplate(w, "settings.html", d)
+}
+
+func (ps *pageServer) uiSettingsSave(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		uiRedirect(w, r, "/settings-ui", "error", "Invalid form data")
+		return
+	}
+
+	parsePaths := func(raw string) []string {
+		var out []string
+		for _, line := range strings.Split(raw, "\n") {
+			line = strings.TrimSpace(line)
+			if line != "" {
+				out = append(out, line)
+			}
+		}
+		return out
+	}
+
+	scanPaths := parsePaths(r.FormValue("scan_paths"))
+	excludePaths := parsePaths(r.FormValue("exclude_paths"))
+	schedule := strings.TrimSpace(r.FormValue("schedule"))
+	scanPaused := r.FormValue("scan_paused") == "on"
+
+	retention, err := strconv.Atoi(r.FormValue("trash_retention_days"))
+	if err != nil || retention < 1 || retention > 365 {
+		uiRedirect(w, r, "/settings-ui", "error", "Trash retention must be 1–365 days")
+		return
+	}
+	walkers, err := strconv.Atoi(r.FormValue("walkers"))
+	if err != nil || walkers < 1 {
+		uiRedirect(w, r, "/settings-ui", "error", "Walkers must be at least 1")
+		return
+	}
+	partialHashers, err := strconv.Atoi(r.FormValue("partial_hashers"))
+	if err != nil || partialHashers < 1 {
+		uiRedirect(w, r, "/settings-ui", "error", "Partial hashers must be at least 1")
+		return
+	}
+	fullHashers, err := strconv.Atoi(r.FormValue("full_hashers"))
+	if err != nil || fullHashers < 1 {
+		uiRedirect(w, r, "/settings-ui", "error", "Full hashers must be at least 1")
+		return
+	}
+
+	patch := handlers.ConfigPatch{
+		ScanPaths:          scanPaths,
+		ExcludePaths:       excludePaths,
+		Schedule:           &schedule,
+		ScanPaused:         &scanPaused,
+		TrashRetentionDays: &retention,
+		ScanWorkers: &handlers.WorkerPatch{
+			Walkers:        &walkers,
+			PartialHashers: &partialHashers,
+			FullHashers:    &fullHashers,
+		},
+	}
+	if err := ps.cfgH.Apply(r.Context(), patch); err != nil {
+		uiRedirect(w, r, "/settings-ui", "error", err.Error())
+		return
+	}
+
+	if ps.sched != nil && schedule != "" {
+		if err := ps.sched.SetJob(schedule, func() {
+			slog.Info("scheduled scan triggered")
+			if _, err := ps.mgr.Start(context.Background(), "schedule"); err != nil {
+				slog.Warn("scheduled scan start", "error", err)
+			}
+		}); err != nil {
+			uiRedirect(w, r, "/settings-ui", "error", "Invalid cron expression: "+err.Error())
+			return
+		}
+	}
+
+	uiRedirect(w, r, "/settings-ui", "success", "Settings saved")
 }

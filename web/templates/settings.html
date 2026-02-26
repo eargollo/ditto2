@@ -1,0 +1,94 @@
+{{define "content"}}
+<div class="space-y-6 max-w-2xl">
+
+  <h1 class="text-2xl font-semibold text-gray-900">Settings</h1>
+
+  <form method="POST" action="/ui/settings" class="space-y-8">
+
+    <!-- Scan Paths -->
+    <div class="bg-white shadow-sm ring-1 ring-gray-200 rounded-lg p-5 space-y-4">
+      <h2 class="text-base font-semibold text-gray-800">Scan Paths</h2>
+
+      <div class="space-y-1">
+        <label for="scan_paths" class="block text-sm font-medium text-gray-700">
+          Directories to scan <span class="text-gray-400 font-normal">(one per line)</span>
+        </label>
+        <textarea id="scan_paths" name="scan_paths" rows="4"
+          class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500">{{.ScanPaths}}</textarea>
+      </div>
+
+      <div class="space-y-1">
+        <label for="exclude_paths" class="block text-sm font-medium text-gray-700">
+          Exclude paths <span class="text-gray-400 font-normal">(one per line)</span>
+        </label>
+        <textarea id="exclude_paths" name="exclude_paths" rows="3"
+          class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500">{{.ExcludePaths}}</textarea>
+      </div>
+    </div>
+
+    <!-- Schedule -->
+    <div class="bg-white shadow-sm ring-1 ring-gray-200 rounded-lg p-5 space-y-4">
+      <h2 class="text-base font-semibold text-gray-800">Schedule</h2>
+
+      <div class="space-y-1">
+        <label for="schedule" class="block text-sm font-medium text-gray-700">Cron expression</label>
+        <input type="text" id="schedule" name="schedule" value="{{.Schedule}}"
+          placeholder="0 2 * * 0"
+          class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        <p class="text-xs text-gray-400">Standard 5-field cron syntax. Example: <code>0 2 * * 0</code> = every Sunday at 02:00.</p>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <input type="checkbox" id="scan_paused" name="scan_paused" {{if .ScanPaused}}checked{{end}}
+          class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+        <label for="scan_paused" class="text-sm font-medium text-gray-700">Pause scheduled scans</label>
+      </div>
+    </div>
+
+    <!-- Trash -->
+    <div class="bg-white shadow-sm ring-1 ring-gray-200 rounded-lg p-5 space-y-4">
+      <h2 class="text-base font-semibold text-gray-800">Trash</h2>
+
+      <div class="space-y-1">
+        <label for="trash_retention_days" class="block text-sm font-medium text-gray-700">Retention days</label>
+        <input type="number" id="trash_retention_days" name="trash_retention_days"
+          value="{{.TrashRetentionDays}}" min="1" max="365"
+          class="w-32 rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        <p class="text-xs text-gray-400">Files in trash are automatically purged after this many days (1–365).</p>
+      </div>
+    </div>
+
+    <!-- Workers -->
+    <div class="bg-white shadow-sm ring-1 ring-gray-200 rounded-lg p-5 space-y-4">
+      <h2 class="text-base font-semibold text-gray-800">Workers</h2>
+
+      <div class="grid grid-cols-3 gap-4">
+        <div class="space-y-1">
+          <label for="walkers" class="block text-sm font-medium text-gray-700">Walkers</label>
+          <input type="number" id="walkers" name="walkers" value="{{.Walkers}}" min="1"
+            class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        </div>
+        <div class="space-y-1">
+          <label for="partial_hashers" class="block text-sm font-medium text-gray-700">Partial hashers</label>
+          <input type="number" id="partial_hashers" name="partial_hashers" value="{{.PartialHashers}}" min="1"
+            class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        </div>
+        <div class="space-y-1">
+          <label for="full_hashers" class="block text-sm font-medium text-gray-700">Full hashers</label>
+          <input type="number" id="full_hashers" name="full_hashers" value="{{.FullHashers}}" min="1"
+            class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        </div>
+      </div>
+      <p class="text-xs text-gray-400">Increasing workers speeds up scans at the cost of higher I/O and CPU usage.</p>
+    </div>
+
+    <div class="flex justify-end">
+      <button type="submit"
+        class="px-5 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        Save Settings
+      </button>
+    </div>
+
+  </form>
+</div>
+{{end}}

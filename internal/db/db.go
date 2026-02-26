@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"embed"
 	"fmt"
+	"time"
 
 	"github.com/pressly/goose/v3"
 	_ "modernc.org/sqlite"
@@ -38,6 +39,36 @@ func Open(path string) (*sql.DB, error) {
 	}
 
 	return db, nil
+}
+
+// LoadSettings returns all rows from the settings table as a key→value map.
+func LoadSettings(db *sql.DB) (map[string]string, error) {
+	rows, err := db.Query("SELECT key, value FROM settings")
+	if err != nil {
+		return nil, fmt.Errorf("query settings: %w", err)
+	}
+	defer rows.Close()
+	m := make(map[string]string)
+	for rows.Next() {
+		var k, v string
+		if err := rows.Scan(&k, &v); err != nil {
+			return nil, fmt.Errorf("scan settings row: %w", err)
+		}
+		m[k] = v
+	}
+	return m, rows.Err()
+}
+
+// SaveSetting upserts a single key in the settings table.
+func SaveSetting(db *sql.DB, key, value string) error {
+	_, err := db.Exec(
+		"INSERT OR REPLACE INTO settings(key, value, updated_at) VALUES(?, ?, ?)",
+		key, value, time.Now().Unix(),
+	)
+	if err != nil {
+		return fmt.Errorf("save setting %q: %w", key, err)
+	}
+	return nil
 }
 
 // RunMigrations applies all pending goose migrations from the embedded FS.

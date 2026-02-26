@@ -1,11 +1,14 @@
-.PHONY: build test run docker-build tailwind lint tidy test-regression-local
+.PHONY: build test run docker-build tailwind lint tidy test-regression-local release
 
-BINARY := ditto
-CMD     := ./cmd/ditto
-DOCKER_TAG := ditto:latest
+BINARY       := ditto
+CMD          := ./cmd/ditto
+DOCKER_TAG   := ditto:latest
+DOCKER_IMAGE := ghcr.io/eargollo/ditto2
+VERSION      ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+LDFLAGS      := -s -w -X main.version=$(VERSION)
 
 build:
-	go build -o $(BINARY) $(CMD)
+	go build -ldflags "$(LDFLAGS)" -o $(BINARY) $(CMD)
 
 test:
 	go test ./...
@@ -67,7 +70,14 @@ tailwind-watch:
 	npx tailwindcss -i web/static/css/tailwind.src.css -o web/static/css/tailwind.css --watch
 
 docker-build:
-	docker build -t $(DOCKER_TAG) .
+	docker build --build-arg VERSION=$(VERSION) -t $(DOCKER_TAG) .
+
+release:
+ifndef TAG
+	$(error TAG is required — usage: make release TAG=v0.1.0)
+endif
+	git tag $(TAG)
+	git push origin $(TAG)
 
 clean:
 	rm -f $(BINARY)

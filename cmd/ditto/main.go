@@ -18,6 +18,9 @@ import (
 	"github.com/eargollo/ditto/web"
 )
 
+// Injected at build time via -ldflags; defaults to "dev".
+var version = "dev"
+
 func main() {
 	configPath := flag.String("config", "config.yaml", "path to config file")
 	flag.Parse()
@@ -39,6 +42,7 @@ func main() {
 		Level: parseLogLevel(cfg.LogLevel),
 	})))
 	slog.Info("ditto starting",
+		"version", version,
 		"log_level", cfg.LogLevel,
 		"http_addr", cfg.HTTPAddr,
 		"db_path", cfg.DBPath,
@@ -55,6 +59,10 @@ func main() {
 	if err := db.RunMigrations(database); err != nil {
 		slog.Error("run migrations", "error", err)
 		os.Exit(1)
+	}
+
+	if dbSettings, err := db.LoadSettings(database); err == nil {
+		config.MergeDBSettings(cfg, dbSettings)
 	}
 
 	// Mark any scans that were 'running' when last process exited as failed.
@@ -103,7 +111,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	srv := api.New(cfg.HTTPAddr, database, cfg, mgr, trashMgr, sched, web.Templates(), web.Static())
+	srv := api.New(cfg.HTTPAddr, database, cfg, mgr, trashMgr, sched, version, web.Templates(), web.Static())
 	if err := srv.Run(ctx); err != nil {
 		slog.Error("server error", "error", err)
 		os.Exit(1)

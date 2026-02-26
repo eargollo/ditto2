@@ -1,8 +1,10 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 
 	"gopkg.in/yaml.v3"
 )
@@ -85,11 +87,48 @@ func Load(path string) (*Config, error) {
 }
 
 // MergeDBSettings overlays settings stored in the DB on top of the config.
-// Keys recognised: "schedule", "scan_paused", "trash_retention_days",
-// "walkers", "partial_hashers", "full_hashers".
-// Unknown keys are silently ignored.
+// Keys recognised: "scan_paths", "exclude_paths", "schedule", "scan_paused",
+// "trash_retention_days", "walkers", "partial_hashers", "full_hashers".
+// Unknown keys and parse errors are silently ignored.
 func MergeDBSettings(cfg *Config, settings map[string]string) {
-	// Stub — will be filled when settings table is wired.
-	_ = cfg
-	_ = settings
+	if v, ok := settings["scan_paths"]; ok && v != "" {
+		var paths []string
+		if err := json.Unmarshal([]byte(v), &paths); err == nil {
+			cfg.ScanPaths = paths
+		}
+	}
+	if v, ok := settings["exclude_paths"]; ok && v != "" {
+		var paths []string
+		if err := json.Unmarshal([]byte(v), &paths); err == nil {
+			cfg.ExcludePaths = paths
+		}
+	}
+	if v, ok := settings["schedule"]; ok && v != "" {
+		cfg.Schedule = v
+	}
+	if v, ok := settings["scan_paused"]; ok && v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			cfg.ScanPaused = b
+		}
+	}
+	if v, ok := settings["trash_retention_days"]; ok && v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.TrashRetentionDays = n
+		}
+	}
+	if v, ok := settings["walkers"]; ok && v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.ScanWorkers.Walkers = n
+		}
+	}
+	if v, ok := settings["partial_hashers"]; ok && v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.ScanWorkers.PartialHashers = n
+		}
+	}
+	if v, ok := settings["full_hashers"]; ok && v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.ScanWorkers.FullHashers = n
+		}
+	}
 }
