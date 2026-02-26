@@ -25,7 +25,7 @@
 
   <!-- Filters -->
   <form method="GET" action="/groups-ui" class="flex flex-wrap items-center gap-3">
-    <select name="status"
+    <select name="status" onchange="this.form.submit()"
       class="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
       <option value="">Active</option>
       <option value="all"      {{if eq .StatusFilter "all"}}selected{{end}}>All</option>
@@ -33,7 +33,7 @@
       <option value="resolved" {{if eq .StatusFilter "resolved"}}selected{{end}}>Resolved</option>
       <option value="watching" {{if eq .StatusFilter "watching"}}selected{{end}}>Watching</option>
     </select>
-    <select name="type"
+    <select name="type" onchange="this.form.submit()"
       class="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
       <option value="">All types</option>
       <option value="image"    {{if eq .TypeFilter "image"}}selected{{end}}>Images</option>
@@ -41,10 +41,6 @@
       <option value="document" {{if eq .TypeFilter "document"}}selected{{end}}>Documents</option>
       <option value="other"    {{if eq .TypeFilter "other"}}selected{{end}}>Other</option>
     </select>
-    <button type="submit"
-      class="px-3 py-1.5 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700">
-      Filter
-    </button>
     {{if or .StatusFilter .TypeFilter}}
     <a href="/groups-ui" class="text-sm text-gray-400 hover:text-gray-600">Clear</a>
     {{end}}
@@ -150,19 +146,35 @@
       <!-- Ignore actions -->
       <div class="border-t border-gray-200 px-5 py-3 flex items-center gap-3 flex-wrap">
         <span class="text-xs text-gray-400">Ignore:</span>
-        <form method="POST" action="/ui/groups/{{.ID}}/ignore" class="inline">
-          <input type="hidden" name="type" value="hash">
-          <button type="submit" class="text-xs text-gray-500 hover:text-indigo-600 underline underline-offset-2">
-            by content hash
-          </button>
-        </form>
+        <div class="relative group inline-block">
+          <form method="POST" action="/ui/groups/{{.ID}}/ignore" class="inline">
+            <input type="hidden" name="type" value="hash">
+            <button type="submit" class="inline-flex items-center gap-0.5 text-xs text-gray-500 hover:text-indigo-600 underline underline-offset-2">
+              by content hash
+              <svg class="w-3 h-3 text-gray-400 no-underline flex-shrink-0" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clip-rule="evenodd" />
+              </svg>
+            </button>
+          </form>
+          <span class="pointer-events-none absolute bottom-full left-0 mb-1.5 w-56 rounded bg-gray-900 px-2.5 py-2 text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity z-20 shadow-lg">
+            Suppresses all copies of this content forever, regardless of filename or location.
+          </span>
+        </div>
         <span class="text-gray-200 text-xs">&middot;</span>
-        <form method="POST" action="/ui/groups/{{.ID}}/ignore" class="inline">
-          <input type="hidden" name="type" value="path_pair">
-          <button type="submit" class="text-xs text-gray-500 hover:text-indigo-600 underline underline-offset-2">
-            watch these paths
-          </button>
-        </form>
+        <div class="relative group inline-block">
+          <form method="POST" action="/ui/groups/{{.ID}}/ignore" class="inline">
+            <input type="hidden" name="type" value="path_pair">
+            <button type="submit" class="inline-flex items-center gap-0.5 text-xs text-gray-500 hover:text-indigo-600 underline underline-offset-2">
+              by files
+              <svg class="w-3 h-3 text-gray-400 no-underline flex-shrink-0" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clip-rule="evenodd" />
+              </svg>
+            </button>
+          </form>
+          <span class="pointer-events-none absolute bottom-full left-0 mb-1.5 w-64 rounded bg-gray-900 px-2.5 py-2 text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity z-20 shadow-lg">
+            Watches these specific file paths and alerts if a new copy appears or the files diverge.
+          </span>
+        </div>
       </div>
 
       {{else}}

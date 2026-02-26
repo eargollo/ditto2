@@ -138,25 +138,37 @@
   <div class="bg-white shadow rounded-lg p-6">
     <h2 class="text-sm font-semibold text-gray-800 mb-3">Ignore options</h2>
     <div class="flex flex-wrap gap-3">
-      <form method="POST" action="/ui/groups/{{.Group.ID}}/ignore">
-        <input type="hidden" name="type" value="hash">
-        <button type="submit"
-          class="px-3 py-1.5 border border-gray-300 bg-white text-sm text-gray-700 rounded-md hover:bg-gray-50">
-          Ignore by content hash
-        </button>
-      </form>
-      <form method="POST" action="/ui/groups/{{.Group.ID}}/ignore">
-        <input type="hidden" name="type" value="path_pair">
-        <button type="submit"
-          class="px-3 py-1.5 border border-gray-300 bg-white text-sm text-gray-700 rounded-md hover:bg-gray-50">
-          Watch these paths
-        </button>
-      </form>
+      <div class="relative group">
+        <form method="POST" action="/ui/groups/{{.Group.ID}}/ignore">
+          <input type="hidden" name="type" value="hash">
+          <button type="submit"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-300 bg-white text-sm text-gray-700 rounded-md hover:bg-gray-50">
+            By content hash
+            <svg class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+              <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clip-rule="evenodd" />
+            </svg>
+          </button>
+        </form>
+        <span class="pointer-events-none absolute bottom-full left-0 mb-1.5 w-64 rounded bg-gray-900 px-2.5 py-2 text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity z-20 shadow-lg">
+          Suppresses all copies of this content forever, regardless of filename or location.
+        </span>
+      </div>
+      <div class="relative group">
+        <form method="POST" action="/ui/groups/{{.Group.ID}}/ignore">
+          <input type="hidden" name="type" value="path_pair">
+          <button type="submit"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-300 bg-white text-sm text-gray-700 rounded-md hover:bg-gray-50">
+            By files
+            <svg class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+              <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clip-rule="evenodd" />
+            </svg>
+          </button>
+        </form>
+        <span class="pointer-events-none absolute bottom-full left-0 mb-1.5 w-64 rounded bg-gray-900 px-2.5 py-2 text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity z-20 shadow-lg">
+          Watches these specific file paths and alerts if a new copy appears or the files diverge.
+        </span>
+      </div>
     </div>
-    <p class="mt-3 text-xs text-gray-400">
-      <strong>Ignore by content hash</strong> &mdash; suppress all files with this content forever.<br>
-      <strong>Watch these paths</strong> &mdash; alert if a new copy appears or the files diverge.
-    </p>
   </div>
 
   {{else}}
