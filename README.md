@@ -42,18 +42,88 @@ open http://localhost:8080
 
 ---
 
-## Docker
+## Docker / Podman
+
+The project uses Podman (`docker` works identically as a drop-in replacement).
+
+### Build
 
 ```bash
-# Build image
-make docker-build
-
-# Run with docker-compose (edit docker-compose.yml first to mount volumes)
-docker-compose up -d
+podman build -t ditto .
 ```
 
-The container exposes port `8080`. Mount your NAS volumes read-only under
-`/volume1`, `/volume2` etc. and set `scan_paths` accordingly.
+### Run — quick smoke test (no config needed)
+
+The container starts with built-in defaults when no config file is mounted.
+Data is written to `/data` inside the container; use a volume to persist it.
+
+```bash
+podman run --rm -p 8080:8080 ditto
+```
+
+Then verify it's alive:
+
+```bash
+curl http://localhost:8080/api/status
+# → {"active_scan":null,"schedule":{...},"last_completed_scan":null}
+```
+
+Open `http://localhost:8080` in a browser and click **Scan Now** — the scan
+path defaults to `/data`, so nothing interesting will be found, but it confirms
+the full pipeline runs.
+
+### Run — with real data
+
+```bash
+podman run --rm \
+  -p 8080:8080 \
+  -v /path/to/ditto-data:/data \          # persists DB + trash
+  -v /your/photos:/mnt/photos:ro \        # directory to scan (read-only)
+  ditto
+```
+
+Then open `http://localhost:8080`, trigger a scan, and review duplicates in the
+Groups page.
+
+### Run — with a config file
+
+Mount a `config.yaml` to set scan paths, schedule, retention, etc.:
+
+```bash
+cat > config.yaml <<'EOF'
+scan_paths:
+  - /mnt/photos
+  - /mnt/documents
+schedule: "0 2 * * 0"   # weekly, Sunday 2am
+trash_retention_days: 30
+EOF
+
+podman run --rm \
+  -p 8080:8080 \
+  -v $(pwd)/config.yaml:/app/config.yaml:ro \
+  -v /path/to/ditto-data:/data \
+  -v /your/photos:/mnt/photos:ro \
+  ditto
+```
+
+### Run — with Podman Compose / Docker Compose
+
+Edit `docker-compose.yml` to uncomment your scan path volume, then:
+
+```bash
+podman compose up -d
+podman compose logs -f
+podman compose down
+```
+
+### Podman machine (macOS)
+
+On macOS, Podman requires a Linux VM:
+
+```bash
+podman machine init    # first time only
+podman machine start
+```
 
 ---
 
@@ -61,7 +131,7 @@ The container exposes port `8080`. Mount your NAS volumes read-only under
 
 ### Prerequisites
 
-- Go 1.23+
+- Go 1.25+
 - `make`
 - (Optional) Node.js / npx for Tailwind CSS rebuild
 
