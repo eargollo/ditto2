@@ -889,6 +889,23 @@ func (ps *pageServer) uiGroupIgnore(w http.ResponseWriter, r *http.Request) {
 	uiRedirect(w, r, "/groups-ui", "success", "Group updated")
 }
 
+func (ps *pageServer) uiGroupReset(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	groupID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	now := time.Now().Unix()
+	if _, err := ps.db.ExecContext(r.Context(),
+		`UPDATE duplicate_groups SET status='unresolved', ignored_at=NULL, updated_at=? WHERE id=?`,
+		now, groupID); err != nil {
+		uiRedirect(w, r, "/groups-ui", "error", "Failed to reset group: "+err.Error())
+		return
+	}
+	uiRedirect(w, r, "/groups-ui", "success", "Group reset to unresolved")
+}
+
 func (ps *pageServer) uiTrashRestore(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {

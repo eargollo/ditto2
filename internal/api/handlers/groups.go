@@ -555,6 +555,30 @@ func (h *GroupsHandler) Ignore(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// Reset handles POST /api/groups/:id/reset.
+// Sets the group status back to "unresolved", removing any ignore or watch state.
+func (h *GroupsHandler) Reset(w http.ResponseWriter, r *http.Request) {
+	groupID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_ID", "Invalid group ID")
+		return
+	}
+	now := time.Now().Unix()
+	res, err := h.DB.ExecContext(r.Context(),
+		`UPDATE duplicate_groups SET status='unresolved', ignored_at=NULL, updated_at=? WHERE id=?`,
+		now, groupID)
+	if err != nil {
+		slog.Error("group reset: update", "group_id", groupID, "error", err)
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
+		return
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		writeError(w, http.StatusNotFound, "NOT_FOUND", "group not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"id": groupID, "status": "unresolved"})
+}
+
 // Thumbnail handles GET /api/groups/:id/thumbnail.
 // Finds the first image file in the group, generates a 320x320 JPEG thumbnail,
 // and returns it. Returns 404 if no image file exists or thumbnail fails.

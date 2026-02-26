@@ -65,6 +65,7 @@ func New(
 		r.Get("/groups/{id}", groupsH.Get)
 		r.Post("/groups/{id}/delete", groupsH.Delete)
 		r.Post("/groups/{id}/ignore", groupsH.Ignore)
+		r.Post("/groups/{id}/reset", groupsH.Reset)
 		r.Get("/groups/{id}/thumbnail", groupsH.Thumbnail)
 
 		r.Get("/files/{id}/info", filesH.Info)
@@ -108,6 +109,7 @@ func New(
 		r.Post("/ui/scan/cancel", ps.uiScanCancel)
 		r.Post("/ui/groups/{id}/delete", ps.uiGroupDelete)
 		r.Post("/ui/groups/{id}/ignore", ps.uiGroupIgnore)
+		r.Post("/ui/groups/{id}/reset", ps.uiGroupReset)
 		r.Post("/ui/trash/{id}/restore", ps.uiTrashRestore)
 		r.Post("/ui/trash/purge", ps.uiTrashPurge)
 		r.Post("/ui/settings", ps.uiSettingsSave)
