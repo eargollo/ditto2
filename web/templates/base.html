@@ -5,20 +5,30 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Ditto — Duplicate Finder</title>
-  <link rel="stylesheet" href="/static/css/tailwind.css" />
-  <script src="/static/js/htmx.min.js" defer></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="/static/js/htmx.min.js"></script>
 </head>
 <body class="h-full flex flex-col">
 
-  <nav class="bg-indigo-700 text-white shadow">
-    <div class="max-w-7xl mx-auto px-4 py-3 flex items-center gap-6">
-      <a href="/" class="font-bold text-lg tracking-tight">Ditto</a>
-      <a href="/groups-ui" class="text-indigo-200 hover:text-white text-sm">Groups</a>
-      <a href="/trash-ui" class="text-indigo-200 hover:text-white text-sm">Trash</a>
+  <nav class="bg-indigo-700 text-white shadow-md">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center gap-6">
+      <a href="/" class="font-bold text-lg tracking-tight hover:text-indigo-200">Ditto</a>
+      <a href="/groups-ui" class="text-indigo-200 hover:text-white text-sm font-medium">Groups</a>
+      <a href="/trash-ui" class="text-indigo-200 hover:text-white text-sm font-medium">Trash</a>
     </div>
   </nav>
 
-  <main class="flex-1 max-w-7xl w-full mx-auto px-4 py-8">
+  {{if .FlashMessage}}
+  <div class="max-w-7xl mx-auto w-full px-4 sm:px-6 mt-4">
+    <div class="rounded-md px-4 py-3 text-sm font-medium
+      {{if eq .FlashType "error"}}bg-red-50 text-red-800 border border-red-200
+      {{else}}bg-green-50 text-green-800 border border-green-200{{end}}">
+      {{.FlashMessage}}
+    </div>
+  </div>
+  {{end}}
+
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-8">
     {{template "content" .}}
   </main>
 

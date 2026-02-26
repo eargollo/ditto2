@@ -1,6 +1,112 @@
 {{define "content"}}
-<div class="space-y-4">
-  <h1 class="text-2xl font-semibold text-gray-900">Duplicate Groups</h1>
-  <p class="text-gray-500 text-sm">Groups will appear here after the first scan.</p>
+<div class="space-y-5">
+
+  <!-- Header -->
+  <div class="flex items-center justify-between">
+    <h1 class="text-2xl font-semibold text-gray-900">Duplicate Groups</h1>
+    <span class="text-sm text-gray-500">{{.Total}} groups</span>
+  </div>
+
+  <!-- Filters -->
+  <form method="GET" action="/groups-ui" class="flex flex-wrap items-center gap-3">
+    <select name="status"
+      class="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+      <option value="">Active</option>
+      <option value="all" {{if eq .StatusFilter "all"}}selected{{end}}>All</option>
+      <option value="ignored" {{if eq .StatusFilter "ignored"}}selected{{end}}>Ignored</option>
+      <option value="resolved" {{if eq .StatusFilter "resolved"}}selected{{end}}>Resolved</option>
+      <option value="watching" {{if eq .StatusFilter "watching"}}selected{{end}}>Watching</option>
+    </select>
+    <select name="type"
+      class="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+      <option value="">All types</option>
+      <option value="image" {{if eq .TypeFilter "image"}}selected{{end}}>Images</option>
+      <option value="video" {{if eq .TypeFilter "video"}}selected{{end}}>Videos</option>
+      <option value="document" {{if eq .TypeFilter "document"}}selected{{end}}>Documents</option>
+      <option value="other" {{if eq .TypeFilter "other"}}selected{{end}}>Other</option>
+    </select>
+    <button type="submit"
+      class="px-3 py-1.5 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700">
+      Filter
+    </button>
+    {{if or .StatusFilter .TypeFilter}}
+    <a href="/groups-ui" class="text-sm text-gray-500 hover:text-gray-700">Clear</a>
+    {{end}}
+  </form>
+
+  {{if .Items}}
+  <!-- Groups table -->
+  <div class="bg-white shadow rounded-lg overflow-hidden">
+    <table class="min-w-full divide-y divide-gray-200">
+      <thead class="bg-gray-50">
+        <tr>
+          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hash</th>
+          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Files</th>
+          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Size each</th>
+          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reclaimable</th>
+          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+          <th class="px-4 py-3"></th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-200 bg-white">
+        {{range .Items}}
+        <tr class="hover:bg-gray-50">
+          <td class="px-4 py-3 font-mono text-xs text-gray-600">{{.HashShort}}...</td>
+          <td class="px-4 py-3">
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700">{{.FileType}}</span>
+          </td>
+          <td class="px-4 py-3 text-sm text-gray-700">{{.FileCount}}</td>
+          <td class="px-4 py-3 text-sm text-gray-700">{{humanBytes .FileSize}}</td>
+          <td class="px-4 py-3 text-sm font-semibold text-indigo-700">{{humanBytes .ReclaimableBytes}}</td>
+          <td class="px-4 py-3">
+            {{if eq .Status "unresolved"}}
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">unresolved</span>
+            {{else if eq .Status "watching_alert"}}
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-800">alert</span>
+            {{else if eq .Status "watching"}}
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">watching</span>
+            {{else if eq .Status "ignored"}}
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-500">ignored</span>
+            {{else if eq .Status "resolved"}}
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">resolved</span>
+            {{else}}
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">{{.Status}}</span>
+            {{end}}
+          </td>
+          <td class="px-4 py-3 text-right">
+            <a href="/groups-ui/{{.ID}}"
+              class="text-indigo-600 hover:text-indigo-800 text-sm font-medium">View &rarr;</a>
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Pagination -->
+  <div class="flex items-center justify-between text-sm">
+    <span class="text-gray-500">
+      Showing {{add .Offset 1}}&ndash;{{add .Offset (len .Items)}} of {{.Total}}
+    </span>
+    <div class="flex gap-2">
+      {{if .HasPrev}}
+      <a href="/groups-ui?offset={{.PrevOffset}}{{if .StatusFilter}}&amp;status={{.StatusFilter}}{{end}}{{if .TypeFilter}}&amp;type={{.TypeFilter}}{{end}}"
+        class="px-3 py-1.5 border border-gray-300 rounded-md bg-white text-gray-700 hover:bg-gray-50">&larr; Prev</a>
+      {{end}}
+      {{if .HasNext}}
+      <a href="/groups-ui?offset={{.NextOffset}}{{if .StatusFilter}}&amp;status={{.StatusFilter}}{{end}}{{if .TypeFilter}}&amp;type={{.TypeFilter}}{{end}}"
+        class="px-3 py-1.5 border border-gray-300 rounded-md bg-white text-gray-700 hover:bg-gray-50">Next &rarr;</a>
+      {{end}}
+    </div>
+  </div>
+
+  {{else}}
+  <div class="bg-white shadow rounded-lg p-12 text-center">
+    <p class="text-gray-500">No duplicate groups found.</p>
+    <p class="text-sm text-gray-400 mt-1">Run a scan from the <a href="/" class="text-indigo-600 hover:underline">Dashboard</a>.</p>
+  </div>
+  {{end}}
+
 </div>
 {{end}}

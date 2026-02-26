@@ -1,0 +1,57 @@
+{{define "scan_status"}}
+{{if .ScanRunning}}
+<div class="space-y-4">
+  <div class="flex items-center gap-3">
+    <svg class="animate-spin h-5 w-5 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+    </svg>
+    <span class="font-medium text-gray-900">Scanning...</span>
+    <span class="text-sm text-gray-500">started at {{.StartedAt}} · triggered by {{.TriggeredBy}}</span>
+  </div>
+  <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 text-sm">
+    <div class="bg-gray-50 rounded p-3">
+      <p class="text-xs text-gray-500">Files found</p>
+      <p class="font-semibold text-gray-900 mt-0.5">{{.FilesDiscovered}}</p>
+    </div>
+    <div class="bg-gray-50 rounded p-3">
+      <p class="text-xs text-gray-500">Candidates</p>
+      <p class="font-semibold text-gray-900 mt-0.5">{{.CandidatesFound}}</p>
+    </div>
+    <div class="bg-gray-50 rounded p-3">
+      <p class="text-xs text-gray-500">Partial hashed</p>
+      <p class="font-semibold text-gray-900 mt-0.5">{{.PartialHashed}}</p>
+    </div>
+    <div class="bg-gray-50 rounded p-3">
+      <p class="text-xs text-gray-500">Full hashed</p>
+      <p class="font-semibold text-gray-900 mt-0.5">{{.FullHashed}}</p>
+    </div>
+    <div class="bg-gray-50 rounded p-3">
+      <p class="text-xs text-gray-500">Bytes read</p>
+      <p class="font-semibold text-gray-900 mt-0.5">{{humanBytes .BytesRead}}</p>
+    </div>
+  </div>
+  <form method="POST" action="/ui/scan/cancel">
+    <button type="submit"
+      class="px-3 py-1.5 text-sm font-medium text-red-700 bg-red-50 border border-red-200 rounded-md hover:bg-red-100">
+      Cancel Scan
+    </button>
+  </form>
+</div>
+{{else}}
+<div class="space-y-2">
+  {{if .HasLastScan}}
+  <p class="text-sm text-gray-700">
+    Last scan: <span class="font-medium">{{.LastFinishedAt}}</span> —
+    {{.LastGroups}} groups found,
+    <span class="text-indigo-600 font-medium">{{humanBytes .LastReclaimable}}</span> reclaimable
+  </p>
+  {{else}}
+  <p class="text-sm text-gray-500">No scan has been run yet. Click <strong>Scan Now</strong> to get started.</p>
+  {{end}}
+  {{if .NextRunAt}}
+  <p class="text-xs text-gray-400">Next scheduled scan: {{.NextRunAt}} <span class="font-mono text-gray-300">({{.CronExpr}})</span></p>
+  {{end}}
+</div>
+{{end}}
+{{end}}

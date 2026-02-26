@@ -1,6 +1,138 @@
 {{define "content"}}
-<div class="space-y-4">
-  <h1 class="text-2xl font-semibold text-gray-900">Group Detail</h1>
-  <p class="text-gray-500 text-sm">Group detail view — not yet implemented.</p>
+{{if .NotFound}}
+<div class="bg-white shadow rounded-lg p-12 text-center">
+  <p class="text-gray-500">Group not found.</p>
+  <a href="/groups-ui" class="mt-2 inline-block text-indigo-600 hover:underline text-sm">&larr; Back to groups</a>
 </div>
+{{else}}
+<div class="space-y-6">
+
+  <!-- Back link -->
+  <a href="/groups-ui" class="text-sm text-indigo-600 hover:text-indigo-800">&larr; Back to groups</a>
+
+  <!-- Group header -->
+  <div class="bg-white shadow rounded-lg p-6">
+    <div class="flex items-start justify-between flex-wrap gap-3">
+      <div>
+        <p class="text-xs text-gray-500 font-medium uppercase tracking-wider mb-1">Content Hash</p>
+        <p class="font-mono text-sm text-gray-800 break-all">{{.Group.ContentHash}}</p>
+        <p class="text-sm text-gray-500 mt-2">
+          {{.Group.FileCount}} files &middot;
+          {{humanBytes .Group.FileSize}} each &middot;
+          <span class="text-indigo-600 font-semibold">{{humanBytes .Group.ReclaimableBytes}} reclaimable</span>
+        </p>
+      </div>
+      <div>
+        {{if eq .Group.Status "unresolved"}}
+        <span class="inline-flex items-center px-2.5 py-1 rounded text-sm font-medium bg-yellow-100 text-yellow-800">unresolved</span>
+        {{else if eq .Group.Status "watching_alert"}}
+        <span class="inline-flex items-center px-2.5 py-1 rounded text-sm font-medium bg-orange-100 text-orange-800">alert</span>
+        {{else if eq .Group.Status "watching"}}
+        <span class="inline-flex items-center px-2.5 py-1 rounded text-sm font-medium bg-blue-100 text-blue-800">watching</span>
+        {{else if eq .Group.Status "ignored"}}
+        <span class="inline-flex items-center px-2.5 py-1 rounded text-sm font-medium bg-gray-100 text-gray-500">ignored</span>
+        {{else if eq .Group.Status "resolved"}}
+        <span class="inline-flex items-center px-2.5 py-1 rounded text-sm font-medium bg-green-100 text-green-700">resolved</span>
+        {{else}}
+        <span class="inline-flex items-center px-2.5 py-1 rounded text-sm font-medium bg-gray-100 text-gray-600">{{.Group.Status}}</span>
+        {{end}}
+      </div>
+    </div>
+  </div>
+
+  {{if eq .Group.Status "unresolved"}}
+  <!-- Delete form: select keeper via radio, delete the rest -->
+  <div class="bg-white shadow rounded-lg overflow-hidden">
+    <div class="px-6 py-4 border-b border-gray-200">
+      <h2 class="text-sm font-semibold text-gray-800">Files in this group</h2>
+      <p class="text-xs text-gray-500 mt-0.5">Select the file to <strong>keep</strong>, then click Delete Others.</p>
+    </div>
+    <form method="POST" action="/ui/groups/{{.Group.ID}}/delete">
+      <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">Keep</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Path</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Size</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Modified</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-200">
+          {{range .Files}}
+          <tr class="hover:bg-gray-50">
+            <td class="px-4 py-3">
+              <input type="radio" name="keeper_id" value="{{.ID}}" required
+                class="h-4 w-4 text-indigo-600 border-gray-300 focus:ring-indigo-500" />
+            </td>
+            <td class="px-4 py-3 font-mono text-xs text-gray-700 max-w-md truncate" title="{{.Path}}">{{.Path}}</td>
+            <td class="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{{humanBytes .Size}}</td>
+            <td class="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{{.MTime}}</td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+      <div class="px-6 py-4 border-t border-gray-200 flex items-center gap-4">
+        <button type="submit"
+          class="px-4 py-2 bg-red-600 text-white text-sm font-semibold rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500">
+          Delete Others
+        </button>
+        <span class="text-xs text-gray-500">The selected file will be kept; the rest will be moved to trash.</span>
+      </div>
+    </form>
+  </div>
+
+  <!-- Ignore actions -->
+  <div class="bg-white shadow rounded-lg p-6">
+    <h2 class="text-sm font-semibold text-gray-800 mb-3">Ignore options</h2>
+    <div class="flex flex-wrap gap-3">
+      <form method="POST" action="/ui/groups/{{.Group.ID}}/ignore">
+        <input type="hidden" name="type" value="hash">
+        <button type="submit"
+          class="px-3 py-1.5 border border-gray-300 bg-white text-sm text-gray-700 rounded-md hover:bg-gray-50">
+          Ignore by content hash
+        </button>
+      </form>
+      <form method="POST" action="/ui/groups/{{.Group.ID}}/ignore">
+        <input type="hidden" name="type" value="path_pair">
+        <button type="submit"
+          class="px-3 py-1.5 border border-gray-300 bg-white text-sm text-gray-700 rounded-md hover:bg-gray-50">
+          Watch these paths
+        </button>
+      </form>
+    </div>
+    <p class="mt-3 text-xs text-gray-400">
+      <strong>Ignore by content hash</strong> &mdash; suppress all files with this content forever.<br>
+      <strong>Watch these paths</strong> &mdash; alert if a new copy appears or the files diverge.
+    </p>
+  </div>
+
+  {{else}}
+  <!-- Read-only file list for non-actionable groups -->
+  <div class="bg-white shadow rounded-lg overflow-hidden">
+    <div class="px-6 py-4 border-b border-gray-200">
+      <h2 class="text-sm font-semibold text-gray-800">Files in this group</h2>
+    </div>
+    <table class="min-w-full divide-y divide-gray-200">
+      <thead class="bg-gray-50">
+        <tr>
+          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Path</th>
+          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Size</th>
+          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Modified</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-200">
+        {{range .Files}}
+        <tr class="hover:bg-gray-50">
+          <td class="px-4 py-3 font-mono text-xs text-gray-700 max-w-lg truncate" title="{{.Path}}">{{.Path}}</td>
+          <td class="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{{humanBytes .Size}}</td>
+          <td class="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{{.MTime}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{end}}
+
+</div>
+{{end}}
 {{end}}

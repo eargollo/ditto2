@@ -1,6 +1,83 @@
 {{define "content"}}
-<div class="space-y-4">
-  <h1 class="text-2xl font-semibold text-gray-900">Trash</h1>
-  <p class="text-gray-500 text-sm">Trash is empty.</p>
+<div class="space-y-5">
+
+  <!-- Header -->
+  <div class="flex items-center justify-between flex-wrap gap-3">
+    <h1 class="text-2xl font-semibold text-gray-900">Trash</h1>
+    <div class="flex items-center gap-4">
+      {{if gt .Total 0}}
+      <span class="text-sm text-gray-500">{{.Total}} items &middot; {{humanBytes .TotalSize}}</span>
+      <form method="POST" action="/ui/trash/purge"
+        onsubmit="return confirm('Permanently delete all {{.Total}} trashed files? This cannot be undone.')">
+        <button type="submit"
+          class="px-3 py-1.5 bg-red-600 text-white text-sm font-semibold rounded-md hover:bg-red-700">
+          Purge All
+        </button>
+      </form>
+      {{end}}
+    </div>
+  </div>
+
+  {{if .Items}}
+  <!-- Trash table -->
+  <div class="bg-white shadow rounded-lg overflow-hidden">
+    <table class="min-w-full divide-y divide-gray-200">
+      <thead class="bg-gray-50">
+        <tr>
+          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Original Path</th>
+          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Size</th>
+          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Trashed</th>
+          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Expires</th>
+          <th class="px-4 py-3"></th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-200 bg-white">
+        {{range .Items}}
+        <tr class="hover:bg-gray-50">
+          <td class="px-4 py-3 font-mono text-xs text-gray-700 max-w-md truncate" title="{{.OriginalPath}}">{{.OriginalPath}}</td>
+          <td class="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{{humanBytes .FileSize}}</td>
+          <td class="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{{.TrashedAt}}</td>
+          <td class="px-4 py-3 text-sm whitespace-nowrap
+            {{if le .DaysRemaining 3}}text-red-600 font-medium{{else}}text-gray-500{{end}}">
+            {{.DaysRemaining}}d
+          </td>
+          <td class="px-4 py-3 text-right">
+            <form method="POST" action="/ui/trash/{{.ID}}/restore" class="inline">
+              <button type="submit"
+                class="text-indigo-600 hover:text-indigo-800 text-sm font-medium">
+                Restore
+              </button>
+            </form>
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Pagination -->
+  {{if or .HasPrev .HasNext}}
+  <div class="flex items-center justify-between text-sm">
+    <span class="text-gray-500">Showing {{add .Offset 1}}&ndash;{{add .Offset (len .Items)}} of {{.Total}}</span>
+    <div class="flex gap-2">
+      {{if .HasPrev}}
+      <a href="/trash-ui?offset={{.PrevOffset}}"
+        class="px-3 py-1.5 border border-gray-300 rounded-md bg-white text-gray-700 hover:bg-gray-50">&larr; Prev</a>
+      {{end}}
+      {{if .HasNext}}
+      <a href="/trash-ui?offset={{.NextOffset}}"
+        class="px-3 py-1.5 border border-gray-300 rounded-md bg-white text-gray-700 hover:bg-gray-50">Next &rarr;</a>
+      {{end}}
+    </div>
+  </div>
+  {{end}}
+
+  {{else}}
+  <div class="bg-white shadow rounded-lg p-12 text-center">
+    <p class="text-gray-500">Trash is empty.</p>
+    <p class="text-sm text-gray-400 mt-1">Files moved to trash will appear here.</p>
+  </div>
+  {{end}}
+
 </div>
 {{end}}

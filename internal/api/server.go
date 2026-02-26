@@ -83,11 +83,29 @@ func New(
 		r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))))
 	}
 	if templatesFS != nil {
-		ph := newPageHandler(templatesFS)
-		r.Get("/", ph("dashboard.html"))
-		r.Get("/groups-ui", ph("groups.html"))
-		r.Get("/groups-ui/{id}", ph("group_detail.html"))
-		r.Get("/trash-ui", ph("trash.html"))
+		ps := &pageServer{
+			db:          db,
+			mgr:         mgr,
+			trashMgr:    trashMgr,
+			cfg:         cfg,
+			sched:       sched,
+			templatesFS: templatesFS,
+		}
+		r.Get("/", ps.dashboardPage)
+		r.Get("/groups-ui", ps.groupsPage)
+		r.Get("/groups-ui/{id}", ps.groupDetailPage)
+		r.Get("/trash-ui", ps.trashPage)
+
+		// Fragment endpoints (HTMX polling)
+		r.Get("/ui/scan-status", ps.scanStatusFragment)
+
+		// UI action endpoints (form POST → redirect)
+		r.Post("/ui/scan", ps.uiScanStart)
+		r.Post("/ui/scan/cancel", ps.uiScanCancel)
+		r.Post("/ui/groups/{id}/delete", ps.uiGroupDelete)
+		r.Post("/ui/groups/{id}/ignore", ps.uiGroupIgnore)
+		r.Post("/ui/trash/{id}/restore", ps.uiTrashRestore)
+		r.Post("/ui/trash/purge", ps.uiTrashPurge)
 	}
 
 	return &Server{
