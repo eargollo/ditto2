@@ -15,6 +15,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/eargollo/ditto/internal/config"
+	"github.com/eargollo/ditto/internal/media"
 	"github.com/eargollo/ditto/internal/scan"
 	"github.com/eargollo/ditto/internal/trash"
 )
@@ -555,6 +556,59 @@ func (h *GroupsHandler) Ignore(w http.ResponseWriter, r *http.Request) {
 }
 
 // Thumbnail handles GET /api/groups/:id/thumbnail.
+// Finds the first image file in the group, generates a 320x320 JPEG thumbnail,
+// and returns it. Returns 404 if no image file exists or thumbnail fails.
 func (h *GroupsHandler) Thumbnail(w http.ResponseWriter, r *http.Request) {
+	groupID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_ID", "Invalid group ID")
+		return
+	}
+
+	// Find the first image file in the group (ordered by path for determinism).
+	rows, err := h.DB.QueryContext(r.Context(),
+		`SELECT path FROM duplicate_files
+		 WHERE group_id = ? AND file_type = ?
+		 ORDER BY path LIMIT 10`,
+		groupID, string(media.FileTypeImage),
+	)
+	if err != nil {
+		slog.Error("groups thumbnail: query files", "group_id", groupID, "error", err)
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
+		return
+	}
+	defer rows.Close()
+
+	var paths []string
+	for rows.Next() {
+		var p string
+		if err := rows.Scan(&p); err == nil {
+			paths = append(paths, p)
+		}
+	}
+	rows.Close()
+
+	if len(paths) == 0 {
+		writeError(w, http.StatusNotFound, "NOT_FOUND", "no previewable file in group")
+		return
+	}
+
+	// Try each candidate path until one produces a thumbnail.
+	for _, path := range paths {
+		thumb, err := media.Thumbnail(path, 320, 320)
+		if err != nil {
+			slog.Warn("groups thumbnail: generate failed", "path", path, "error", err)
+			continue
+		}
+		if thumb == nil {
+			continue
+		}
+		w.Header().Set("Content-Type", "image/jpeg")
+		w.Header().Set("Cache-Control", "public, max-age=3600")
+		w.WriteHeader(http.StatusOK)
+		w.Write(thumb) //nolint:errcheck
+		return
+	}
+
 	writeError(w, http.StatusNotFound, "NOT_FOUND", "no previewable file in group")
 }
