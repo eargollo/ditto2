@@ -60,8 +60,15 @@ func (c *Config) applyDefaults() {
 }
 
 // Load reads and parses the YAML config file at path.
+// If the file does not exist, Load returns a default Config so the server
+// can start without a mounted config file (useful for bare Docker runs).
 func Load(path string) (*Config, error) {
 	f, err := os.Open(path)
+	if os.IsNotExist(err) {
+		var cfg Config
+		cfg.applyDefaults()
+		return &cfg, nil
+	}
 	if err != nil {
 		return nil, fmt.Errorf("open config %q: %w", path, err)
 	}
