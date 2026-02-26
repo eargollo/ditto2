@@ -67,6 +67,7 @@ func New(
 		r.Post("/groups/{id}/ignore", groupsH.Ignore)
 		r.Get("/groups/{id}/thumbnail", groupsH.Thumbnail)
 
+		r.Get("/files/{id}/info", filesH.Info)
 		r.Get("/files/{id}/thumbnail", filesH.Thumbnail)
 		r.Get("/files/{id}/preview", filesH.Preview)
 

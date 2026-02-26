@@ -6,7 +6,9 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -16,6 +18,60 @@ import (
 // FilesHandler handles file-level API endpoints.
 type FilesHandler struct {
 	DB *sql.DB
+}
+
+// fileInfoResponse is returned by GET /api/files/{id}/info.
+type fileInfoResponse struct {
+	ID       int64      `json:"id"`
+	Path     string     `json:"path"`
+	Filename string     `json:"filename"`
+	Size     int64      `json:"size"`
+	Modified time.Time  `json:"modified"`
+	MimeType string     `json:"mime_type"`
+	FileType string     `json:"file_type"`
+	Image    *media.ImageMeta `json:"image,omitempty"`
+}
+
+// Info handles GET /api/files/{id}/info.
+func (h *FilesHandler) Info(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_ID", "Invalid file ID")
+		return
+	}
+
+	var path, fileType string
+	var size int64
+	var mtime int64
+	err = h.DB.QueryRowContext(r.Context(),
+		`SELECT path, file_type, size, mtime FROM duplicate_files WHERE id = ?`, id,
+	).Scan(&path, &fileType, &size, &mtime)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeError(w, http.StatusNotFound, "NOT_FOUND", "file not found")
+		return
+	}
+	if err != nil {
+		slog.Error("files info: db query", "id", id, "error", err)
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
+		return
+	}
+
+	resp := fileInfoResponse{
+		ID:       id,
+		Path:     path,
+		Filename: filepath.Base(path),
+		Size:     size,
+		Modified: time.Unix(mtime, 0).UTC(),
+		MimeType: media.ContentType(path),
+		FileType: fileType,
+	}
+
+	if fileType == string(media.FileTypeImage) {
+		meta := media.ExtractImageMeta(path)
+		resp.Image = &meta
+	}
+
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // Thumbnail handles GET /api/files/:id/thumbnail.
