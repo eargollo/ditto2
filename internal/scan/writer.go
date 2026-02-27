@@ -10,6 +10,9 @@ import (
 	"github.com/eargollo/ditto/internal/media"
 )
 
+// wallMs returns milliseconds elapsed since t0 as int64.
+func wallMs(t0 time.Time) int64 { return time.Since(t0).Milliseconds() }
+
 // WriteStats holds the final counts returned by RunDBWriter.
 type WriteStats struct {
 	DuplicateGroups  int64
@@ -44,7 +47,7 @@ func RunDBWriter(ctx context.Context, db *sql.DB, scanID int64, batchSize int, i
 			return
 		}
 		// Use Background so the flush survives context cancellation.
-		if err := updateCache(context.Background(), db, scanID, cacheBuf, batchSize); err != nil {
+		if err := updateCache(context.Background(), db, scanID, cacheBuf, batchSize, progress); err != nil {
 			slog.Warn("progressive cache update failed", "error", err)
 		}
 		cacheBuf = cacheBuf[:0]
@@ -102,7 +105,7 @@ func persistGroups(ctx context.Context, db *sql.DB, scanID int64, groups map[str
 		}
 		batch := dupGroups[i:end]
 
-		if err := writeGroupBatch(ctx, db, scanID, batch, now, &stats); err != nil {
+		if err := writeGroupBatch(ctx, db, scanID, batch, now, &stats, progress); err != nil {
 			return stats, err
 		}
 		if progress != nil {
@@ -115,7 +118,8 @@ func persistGroups(ctx context.Context, db *sql.DB, scanID int64, groups map[str
 
 // writeGroupBatch writes a slice of duplicate groups within a single transaction,
 // reusing prepared statements across all groups in the batch.
-func writeGroupBatch(ctx context.Context, db *sql.DB, scanID int64, batch []groupEntry, now int64, stats *WriteStats) error {
+func writeGroupBatch(ctx context.Context, db *sql.DB, scanID int64, batch []groupEntry, now int64, stats *WriteStats, progress *Progress) error {
+	t0 := time.Now()
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
@@ -165,7 +169,11 @@ func writeGroupBatch(ctx context.Context, db *sql.DB, scanID int64, batch []grou
 			return err
 		}
 	}
-	return tx.Commit()
+	err = tx.Commit()
+	if progress != nil {
+		progress.DBWriteMs.Add(wallMs(t0))
+	}
+	return err
 }
 
 // writeGroupInTx writes a single duplicate group using pre-prepared statements
@@ -224,7 +232,8 @@ func writeGroupInTx(
 
 // updateCache upserts file_cache entries for all files that passed through
 // the full hash stage.
-func updateCache(ctx context.Context, db *sql.DB, scanID int64, files []HashedFile, batchSize int) error {
+func updateCache(ctx context.Context, db *sql.DB, scanID int64, files []HashedFile, batchSize int, progress *Progress) error {
+	t0 := time.Now()
 	now := time.Now().Unix()
 	for i := 0; i < len(files); i += batchSize {
 		end := i + batchSize
@@ -255,6 +264,9 @@ func updateCache(ctx context.Context, db *sql.DB, scanID int64, files []HashedFi
 		if err := tx.Commit(); err != nil {
 			return err
 		}
+	}
+	if progress != nil {
+		progress.DBWriteMs.Add(wallMs(t0))
 	}
 	return nil
 }

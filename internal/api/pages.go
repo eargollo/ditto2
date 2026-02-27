@@ -32,6 +32,7 @@ var templateFuncs = template.FuncMap{
 	"humanBytes":     humanBytes,
 	"commaN":         commaN,
 	"formatDuration": formatDuration,
+	"msDuration": func(ms int64) string { return formatDuration(ms / 1000) },
 	"pct": func(n, total int64) int64 {
 		if total == 0 {
 			return 0
@@ -136,6 +137,11 @@ type scanHistoryItem struct {
 	TriggeredBy      string
 	CacheHitStr      string // "85%" or "" when no data
 	FilesPerSec      int64  // 0 when no data
+	// Timing (milliseconds)
+	DiskReadMs    int64
+	DBReadMs      int64
+	DBWriteMs     int64
+	TotalTimingMs int64 // DiskReadMs + DBReadMs + DBWriteMs; 0 = no data
 }
 
 type snapshotPoint struct {
@@ -326,7 +332,8 @@ func (ps *pageServer) dashboardPage(w http.ResponseWriter, r *http.Request) {
 		SELECT id, started_at, COALESCE(duration_seconds,0),
 		       files_discovered, duplicate_groups, reclaimable_bytes,
 		       errors, status, triggered_by,
-		       cache_hits, cache_misses
+		       cache_hits, cache_misses,
+		       disk_read_ms, db_read_ms, db_write_ms
 		FROM scan_history
 		WHERE status IN ('completed','failed','cancelled')
 		ORDER BY started_at DESC
@@ -339,7 +346,8 @@ func (ps *pageServer) dashboardPage(w http.ResponseWriter, r *http.Request) {
 			if err := scanRows.Scan(&item.ID, &startedAt, &durSecs,
 				&item.FilesDiscovered, &item.DuplicateGroups, &item.ReclaimableBytes,
 				&item.ErrorCount, &item.Status, &item.TriggeredBy,
-				&cacheHits, &cacheMisses); err != nil {
+				&cacheHits, &cacheMisses,
+				&item.DiskReadMs, &item.DBReadMs, &item.DBWriteMs); err != nil {
 				continue
 			}
 			item.StartedAt = time.Unix(startedAt, 0).Format("Jan 2, 2006 15:04")
@@ -350,6 +358,7 @@ func (ps *pageServer) dashboardPage(w http.ResponseWriter, r *http.Request) {
 			if durSecs > 0 {
 				item.FilesPerSec = item.FilesDiscovered / durSecs
 			}
+			item.TotalTimingMs = item.DiskReadMs + item.DBReadMs + item.DBWriteMs
 			d.RecentScans = append(d.RecentScans, item)
 		}
 	}

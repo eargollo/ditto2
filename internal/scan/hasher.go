@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"sync"
+	"time"
 )
 
 const partialHashBytes = 64 * 1024 // 64 KB
@@ -101,7 +102,9 @@ func RunPartialHashers(ctx context.Context, numWorkers int, progress *Progress, 
 					if !ok {
 						return
 					}
+					t0 := time.Now()
 					hash, n, err := hashPartial(fi.Path)
+					progress.DiskReadMs.Add(time.Since(t0).Milliseconds())
 					if err != nil {
 						report(fi.Path, "partial_hash", err.Error())
 						continue
@@ -142,7 +145,9 @@ func RunFullHashers(ctx context.Context, numWorkers int, progress *Progress, in 
 					if !ok {
 						return
 					}
+					t0 := time.Now()
 					hash, n, err := hashFull(hf.Path)
+					progress.DiskReadMs.Add(time.Since(t0).Milliseconds())
 					if err != nil {
 						report(hf.Path, "full_hash", err.Error())
 						continue

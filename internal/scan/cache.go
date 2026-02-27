@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
+	"time"
 )
 
 // cacheBatchSize is the number of candidates sent in a single SELECT … IN (…)
@@ -98,9 +99,11 @@ func lookupBatch(ctx context.Context, db *sql.DB, batch []FileInfo, hits chan<- 
 	placeholders := strings.Repeat("?,", len(batch))
 	placeholders = placeholders[:len(placeholders)-1]
 
+	t0 := time.Now()
 	rows, err := db.QueryContext(ctx,
 		"SELECT path, size, mtime, full_hash FROM file_cache WHERE path IN ("+placeholders+")",
 		args...)
+	progress.DBReadMs.Add(time.Since(t0).Milliseconds())
 
 	// Build a map of path → cached entry from the result set.
 	type cacheEntry struct {

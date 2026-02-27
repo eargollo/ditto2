@@ -105,6 +105,7 @@
           <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Groups</th>
           <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Reclaimable</th>
           <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Errors</th>
+          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Timing</th>
           <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
         </tr>
       </thead>
@@ -131,6 +132,24 @@
             {{else}}
             <span class="text-gray-400">—</span>
             {{end}}
+          </td>
+          <td class="px-4 py-2.5">
+            {{if gt .TotalTimingMs 0}}
+            {{/* Stacked bar: blue=disk, amber=db-write, green=db-read */}}
+            <div class="flex flex-col gap-0.5"
+                 title="Disk I/O+hash: {{msDuration .DiskReadMs}}&#10;DB writes: {{msDuration .DBWriteMs}}&#10;DB reads: {{msDuration .DBReadMs}}">
+              <div class="flex h-2 w-24 rounded overflow-hidden gap-px">
+                <div class="bg-blue-400"  style="width:{{pct .DiskReadMs .TotalTimingMs}}%"></div>
+                <div class="bg-amber-400" style="width:{{pct .DBWriteMs  .TotalTimingMs}}%"></div>
+                <div class="bg-green-400" style="width:{{pct .DBReadMs   .TotalTimingMs}}%"></div>
+              </div>
+              <div class="flex gap-2 text-xs text-gray-400 whitespace-nowrap">
+                <span class="text-blue-500">🖴 {{pct .DiskReadMs .TotalTimingMs}}%</span>
+                <span class="text-amber-500">W {{pct .DBWriteMs .TotalTimingMs}}%</span>
+                <span class="text-green-500">R {{pct .DBReadMs .TotalTimingMs}}%</span>
+              </div>
+            </div>
+            {{else}}<span class="text-gray-400">—</span>{{end}}
           </td>
           <td class="px-4 py-2.5">
             {{if eq .Status "completed"}}

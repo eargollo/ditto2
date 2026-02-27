@@ -20,6 +20,10 @@ type Progress struct {
 	Phase2StartedAt atomic.Int64
 	GroupsTotal     atomic.Int64 // total duplicate groups to write
 	GroupsWritten   atomic.Int64 // duplicate groups written so far
+	// Timing counters (milliseconds, accumulated across all worker goroutines)
+	DiskReadMs atomic.Int64 // time spent in hash operations (I/O + SHA256)
+	DBReadMs   atomic.Int64 // time spent in cache-check SELECT queries
+	DBWriteMs  atomic.Int64 // time spent in DB write operations (cache + groups)
 }
 
 // ErrorReporter records a per-file pipeline error: increments the error

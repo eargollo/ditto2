@@ -254,7 +254,10 @@ func progressReporter(ctx context.Context, db *sql.DB, scanID int64, p *Progress
 			    errors                    = ?,
 			    progress_groups_written   = ?,
 			    progress_groups_total     = ?,
-			    phase2_started_at         = ?
+			    phase2_started_at         = ?,
+			    disk_read_ms             = ?,
+			    db_read_ms               = ?,
+			    db_write_ms              = ?
 			WHERE id = ?`,
 			p.FilesDiscovered.Load(),
 			p.CandidatesFound.Load(),
@@ -267,6 +270,9 @@ func progressReporter(ctx context.Context, db *sql.DB, scanID int64, p *Progress
 			p.GroupsWritten.Load(),
 			p.GroupsTotal.Load(),
 			p.Phase2StartedAt.Load(),
+			p.DiskReadMs.Load(),
+			p.DBReadMs.Load(),
+			p.DBWriteMs.Load(),
 			scanID)
 		if err != nil && ctx.Err() == nil {
 			slog.Warn("progress reporter: update failed", "error", err)
@@ -324,7 +330,10 @@ func finaliseScanRecord(db *sql.DB, scanID int64, status string, finishedAt, dur
 		    duplicate_groups  = ?,
 		    duplicate_files   = ?,
 		    reclaimable_bytes = ?,
-		    errors            = ?
+		    errors            = ?,
+		    disk_read_ms      = ?,
+		    db_read_ms        = ?,
+		    db_write_ms       = ?
 		WHERE id = ?`,
 		status, finishedAt, durationSecs,
 		p.FilesDiscovered.Load(),
@@ -333,6 +342,9 @@ func finaliseScanRecord(db *sql.DB, scanID int64, status string, finishedAt, dur
 		p.CacheMisses.Load(),
 		dupGroups, dupFiles, reclaimable,
 		p.Errors.Load(),
+		p.DiskReadMs.Load(),
+		p.DBReadMs.Load(),
+		p.DBWriteMs.Load(),
 		scanID)
 	return err
 }
