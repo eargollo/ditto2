@@ -1,4 +1,4 @@
-.PHONY: build test run docker-build tailwind lint tidy test-regression-local release
+.PHONY: build test run docker-build tailwind lint tidy test-regression-local release benchmark
 
 BINARY       := ditto
 CMD          := ./cmd/ditto
@@ -78,6 +78,37 @@ ifndef TAG
 endif
 	git tag $(TAG)
 	git push origin $(TAG)
+
+# benchmark spins up a fresh Ditto instance on BENCH_PATH, runs one full scan,
+# fetches telemetry, saves a JSON report in benchmarks/, then shuts down.
+#
+# Usage:  make benchmark BENCH_PATH=/path/to/your/files
+#
+# Optionally set BENCH_PORT (default 8380) to avoid conflicts with dev server.
+BENCH_PORT  ?= 8380
+BENCH_DB    := /tmp/ditto-bench.db
+BENCH_TRASH := /tmp/ditto-bench-trash
+BENCH_CFG   := /tmp/ditto-bench.yaml
+
+benchmark: build
+ifndef BENCH_PATH
+	$(error BENCH_PATH is required — usage: make benchmark BENCH_PATH=/your/files)
+endif
+	@rm -f $(BENCH_DB); \
+	printf 'scan_paths:\n  - $(BENCH_PATH)\ndb_path: $(BENCH_DB)\ntrash_dir: $(BENCH_TRASH)\nhttp_addr: ":$(BENCH_PORT)"\nlog_level: info\n' \
+		> $(BENCH_CFG); \
+	./$(BINARY) --config $(BENCH_CFG) & \
+	SERVER_PID=$$!; \
+	trap "echo '==> Stopping ditto (PID '$$SERVER_PID')'; kill $$SERVER_PID 2>/dev/null; wait $$SERVER_PID 2>/dev/null" EXIT; \
+	echo "==> Waiting for ditto to be ready (up to 10s)..."; \
+	for i in $$(seq 1 20); do \
+		curl -sf http://localhost:$(BENCH_PORT)/api/status >/dev/null 2>&1 && break; \
+		sleep 0.5; \
+	done; \
+	curl -sf http://localhost:$(BENCH_PORT)/api/status >/dev/null 2>&1 \
+		|| { echo "ERROR: ditto did not become ready" >&2; exit 1; }; \
+	DITTO_URL=http://localhost:$(BENCH_PORT) BENCH_OUT=benchmarks \
+		bash scripts/benchmark.sh
 
 clean:
 	rm -f $(BINARY)

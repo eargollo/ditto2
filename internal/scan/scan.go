@@ -9,6 +9,62 @@ import (
 	"time"
 )
 
+// logTelemetry emits a structured "scan telemetry" log entry with derived
+// efficiency metrics so operators can compare scan performance across versions
+// and corpus sizes without querying the database.
+func logTelemetry(scanID, durationSecs int64, p *Progress) {
+	filesDiscovered := p.FilesDiscovered.Load()
+	candidates := p.CandidatesFound.Load()
+	cacheHits := p.CacheHits.Load()
+	cacheMisses := p.CacheMisses.Load()
+	bytesRead := p.BytesRead.Load()
+	diskReadMs := p.DiskReadMs.Load()
+	dbReadMs := p.DBReadMs.Load()
+	dbWriteMs := p.DBWriteMs.Load()
+	dupGroups := p.GroupsTotal.Load()
+
+	var filesPerSec, candidatePct, cacheHitPct, hashThroughputMBps float64
+	var diskPct, dbWritePct, dbReadPct float64
+
+	if durationSecs > 0 {
+		filesPerSec = float64(filesDiscovered) / float64(durationSecs)
+	}
+	if filesDiscovered > 0 {
+		candidatePct = float64(candidates) * 100 / float64(filesDiscovered)
+	}
+	totalCache := cacheHits + cacheMisses
+	if totalCache > 0 {
+		cacheHitPct = float64(cacheHits) * 100 / float64(totalCache)
+	}
+	if diskReadMs > 0 {
+		hashThroughputMBps = float64(bytesRead) / (float64(diskReadMs) / 1000.0) / 1024 / 1024
+	}
+	totalTimingMs := diskReadMs + dbReadMs + dbWriteMs
+	if totalTimingMs > 0 {
+		diskPct = float64(diskReadMs) * 100 / float64(totalTimingMs)
+		dbWritePct = float64(dbWriteMs) * 100 / float64(totalTimingMs)
+		dbReadPct = float64(dbReadMs) * 100 / float64(totalTimingMs)
+	}
+
+	slog.Info("scan telemetry",
+		"scan_id", scanID,
+		"duration_secs", durationSecs,
+		"files_discovered", filesDiscovered,
+		"files_per_sec", fmt.Sprintf("%.1f", filesPerSec),
+		"candidate_pct", fmt.Sprintf("%.1f%%", candidatePct),
+		"cache_hit_pct", fmt.Sprintf("%.1f%%", cacheHitPct),
+		"duplicate_groups", dupGroups,
+		"bytes_read_mb", fmt.Sprintf("%.1f", float64(bytesRead)/1024/1024),
+		"hash_throughput_mbps", fmt.Sprintf("%.1f", hashThroughputMBps),
+		"disk_read_ms", diskReadMs,
+		"db_read_ms", dbReadMs,
+		"db_write_ms", dbWriteMs,
+		"disk_pct", fmt.Sprintf("%.1f%%", diskPct),
+		"db_write_pct", fmt.Sprintf("%.1f%%", dbWritePct),
+		"db_read_pct", fmt.Sprintf("%.1f%%", dbReadPct),
+	)
+}
+
 // newErrorReporter returns an ErrorReporter that:
 //  1. increments p.Errors
 //  2. emits a slog.Warn with stage, path, and error message
@@ -120,6 +176,7 @@ func (s *Scanner) execute(ctx context.Context, scanID int64, triggeredBy string,
 		if err := insertScanSnapshot(s.db, scanID, finishedAt.Unix(), progress); err != nil {
 			slog.Error("insert scan snapshot", "id", scanID, "error", err)
 		}
+		logTelemetry(scanID, duration, progress)
 	}
 
 	slog.Info("scan finished",

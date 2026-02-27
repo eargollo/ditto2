@@ -24,3 +24,6 @@ data/
 *.swp
 
 tmp/
+
+# Benchmark reports (local only)
+benchmarks/

@@ -61,6 +61,7 @@ func New(
 
 		r.Post("/scans", scansH.Create)
 		r.Get("/scans", scansH.List)
+		r.Get("/scans/{id}/telemetry", scansH.Telemetry)
 		r.Get("/scans/{id}", scansH.Get)
 		r.Delete("/scans/current", scansH.Cancel)
 
