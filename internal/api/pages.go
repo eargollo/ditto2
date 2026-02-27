@@ -29,11 +29,18 @@ import (
 // ── Template helpers ──────────────────────────────────────────────────────────
 
 var templateFuncs = template.FuncMap{
-	"humanBytes": humanBytes,
-	"commaN":     commaN,
-	"add":        func(a, b int) int { return a + b },
-	"sub":        func(a, b int) int { return a - b },
-	"base":       filepath.Base,
+	"humanBytes":     humanBytes,
+	"commaN":         commaN,
+	"formatDuration": formatDuration,
+	"pct": func(n, total int64) int64 {
+		if total == 0 {
+			return 0
+		}
+		return n * 100 / total
+	},
+	"add":  func(a, b int) int { return a + b },
+	"sub":  func(a, b int) int { return a - b },
+	"base": filepath.Base,
 	"truncate": func(s string, n int) string {
 		if len(s) <= n {
 			return s
@@ -96,11 +103,19 @@ type scanStatusData struct {
 	ScanID          int64
 	StartedAt       string
 	TriggeredBy     string
+	ElapsedSecs     int64
+	// Phase 1 — hashing
 	FilesDiscovered int64
 	CandidatesFound int64
 	PartialHashed   int64
 	FullHashed      int64
 	BytesRead       int64
+	// Phase 2 — writing groups
+	Phase         string // "scanning" | "writing"
+	GroupsWritten int64
+	GroupsTotal   int64
+	ETASecs       int64 // 0 = not yet estimable
+	// Last completed scan
 	HasLastScan     bool
 	LastFinishedAt  string
 	LastGroups      int64
@@ -235,7 +250,8 @@ type settingsPageData struct {
 // ── pageServer ────────────────────────────────────────────────────────────────
 
 type pageServer struct {
-	db          *sql.DB
+	db          *sql.DB // write connection — mutations only
+	readDB      *sql.DB // read-only pool — all SELECT queries
 	mgr         *scan.Manager
 	trashMgr    *trash.Manager
 	cfg         *config.Config
@@ -288,25 +304,25 @@ func (ps *pageServer) dashboardPage(w http.ResponseWriter, r *http.Request) {
 	d := dashboardData{baseData: flashFromQuery(r)}
 
 	// Current active groups.
-	ps.db.QueryRowContext(r.Context(), `
+	ps.readDB.QueryRowContext(r.Context(), `
 		SELECT COALESCE(SUM(1),0), COALESCE(SUM(file_count),0), COALESCE(SUM(reclaimable_bytes),0)
 		FROM duplicate_groups WHERE status IN ('unresolved','watching_alert')
 	`).Scan(&d.Groups, &d.Files, &d.Reclaimable)
 
 	// All-time deletion stats.
-	ps.db.QueryRowContext(r.Context(),
+	ps.readDB.QueryRowContext(r.Context(),
 		`SELECT COUNT(*), COALESCE(SUM(file_size),0) FROM deletion_log`,
 	).Scan(&d.DeletedAllTime, &d.ReclaimedAllTime)
 
 	// Last-30-day deletion stats.
 	since30d := time.Now().Add(-30 * 24 * time.Hour).Unix()
-	ps.db.QueryRowContext(r.Context(),
+	ps.readDB.QueryRowContext(r.Context(),
 		`SELECT COUNT(*), COALESCE(SUM(file_size),0) FROM deletion_log WHERE deleted_at >= ?`,
 		since30d,
 	).Scan(&d.Deleted30d, &d.Reclaimed30d)
 
 	// Recent scan history (last 10 finished scans).
-	scanRows, err := ps.db.QueryContext(r.Context(), `
+	scanRows, err := ps.readDB.QueryContext(r.Context(), `
 		SELECT id, started_at, COALESCE(duration_seconds,0),
 		       files_discovered, duplicate_groups, reclaimable_bytes,
 		       errors, status, triggered_by,
@@ -342,7 +358,7 @@ func (ps *pageServer) dashboardPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Trend chart snapshots (all, ascending).
-	snapRows, err := ps.db.QueryContext(r.Context(), `
+	snapRows, err := ps.readDB.QueryContext(r.Context(), `
 		SELECT ss.snapshot_at, ss.duplicate_groups, ss.reclaimable_bytes,
 		       ss.cumulative_reclaimed_bytes, COALESCE(sh.duration_seconds, 0)
 		FROM scan_snapshots ss
@@ -395,19 +411,19 @@ func (ps *pageServer) groupsPage(w http.ResponseWriter, r *http.Request) {
 
 	// Overall active stats (always from active groups, regardless of filter).
 	var totalActiveGroups, totalActiveFiles, totalReclaimable int64
-	ps.db.QueryRowContext(r.Context(), `
+	ps.readDB.QueryRowContext(r.Context(), `
 		SELECT COALESCE(SUM(1),0), COALESCE(SUM(file_count),0), COALESCE(SUM(reclaimable_bytes),0)
 		FROM duplicate_groups WHERE status IN ('unresolved','watching_alert')
 	`).Scan(&totalActiveGroups, &totalActiveFiles, &totalReclaimable)
 
 	var total int
-	ps.db.QueryRowContext(r.Context(),
+	ps.readDB.QueryRowContext(r.Context(),
 		"SELECT COUNT(*) FROM duplicate_groups WHERE 1=1"+where,
 		args...,
 	).Scan(&total)
 
 	queryArgs := append(append([]interface{}{}, args...), pageLimit, offset)
-	rows, err := ps.db.QueryContext(r.Context(), `
+	rows, err := ps.readDB.QueryContext(r.Context(), `
 		SELECT id, content_hash, file_size, file_count, reclaimable_bytes, file_type, status
 		FROM duplicate_groups
 		WHERE 1=1`+where+`
@@ -446,7 +462,7 @@ func (ps *pageServer) groupsPage(w http.ResponseWriter, r *http.Request) {
 		for i, id := range groupIDs {
 			fargs[i] = id
 		}
-		fileRows, ferr := ps.db.QueryContext(r.Context(),
+		fileRows, ferr := ps.readDB.QueryContext(r.Context(),
 			"SELECT group_id, id, path, size, mtime, file_type FROM duplicate_files "+
 				"WHERE group_id IN ("+placeholders+") ORDER BY group_id, path",
 			fargs...)
@@ -507,7 +523,7 @@ func (ps *pageServer) groupDetailPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var g groupPageItem
-	err = ps.db.QueryRowContext(r.Context(), `
+	err = ps.readDB.QueryRowContext(r.Context(), `
 		SELECT id, content_hash, file_size, file_count, reclaimable_bytes, file_type, status
 		FROM duplicate_groups WHERE id = ?`, id,
 	).Scan(&g.ID, &g.ContentHash, &g.FileSize, &g.FileCount, &g.ReclaimableBytes, &g.FileType, &g.Status)
@@ -524,7 +540,7 @@ func (ps *pageServer) groupDetailPage(w http.ResponseWriter, r *http.Request) {
 		g.HashShort = g.ContentHash[:8]
 	}
 
-	fileRows, err := ps.db.QueryContext(r.Context(), `
+	fileRows, err := ps.readDB.QueryContext(r.Context(), `
 		SELECT id, path, size, mtime, file_type
 		FROM duplicate_files WHERE group_id = ? ORDER BY path`, id)
 	var files []groupFileItem
@@ -565,11 +581,11 @@ func (ps *pageServer) trashPage(w http.ResponseWriter, r *http.Request) {
 
 	var total int
 	var totalSize int64
-	ps.db.QueryRowContext(r.Context(),
+	ps.readDB.QueryRowContext(r.Context(),
 		`SELECT COUNT(*), COALESCE(SUM(file_size),0) FROM trash WHERE status='trashed'`,
 	).Scan(&total, &totalSize)
 
-	rows, err := ps.db.QueryContext(r.Context(), `
+	rows, err := ps.readDB.QueryContext(r.Context(), `
 		SELECT id, original_path, file_size, trashed_at, expires_at, group_id
 		FROM trash WHERE status='trashed'
 		ORDER BY trashed_at DESC
@@ -634,17 +650,32 @@ func (ps *pageServer) scanStatusFragment(w http.ResponseWriter, r *http.Request)
 			data.ScanID = active.ID
 			data.StartedAt = active.StartedAt.Format("15:04:05")
 			data.TriggeredBy = active.TriggeredBy
+			data.ElapsedSecs = int64(time.Since(active.StartedAt).Seconds())
 			p := active.Progress
 			data.FilesDiscovered = p.FilesDiscovered.Load()
 			data.CandidatesFound = p.CandidatesFound.Load()
 			data.PartialHashed = p.PartialHashed.Load()
 			data.FullHashed = p.FullHashed.Load()
 			data.BytesRead = p.BytesRead.Load()
+			// Phase 2 progress
+			phase2Started := p.Phase2StartedAt.Load()
+			data.GroupsWritten = p.GroupsWritten.Load()
+			data.GroupsTotal = p.GroupsTotal.Load()
+			if phase2Started > 0 {
+				data.Phase = "writing"
+				if data.GroupsWritten > 0 {
+					elapsedP2 := time.Now().Unix() - phase2Started
+					remaining := data.GroupsTotal - data.GroupsWritten
+					data.ETASecs = elapsedP2 * remaining / data.GroupsWritten
+				}
+			} else {
+				data.Phase = "scanning"
+			}
 		}
 	}
 
 	var lastFinishedAt int64
-	err := ps.db.QueryRowContext(r.Context(), `
+	err := ps.readDB.QueryRowContext(r.Context(), `
 		SELECT finished_at, duplicate_groups, reclaimable_bytes
 		FROM scan_history WHERE status='completed'
 		ORDER BY finished_at DESC LIMIT 1`,
@@ -707,7 +738,7 @@ func (ps *pageServer) uiGroupDelete(w http.ResponseWriter, r *http.Request) {
 
 	var contentHash string
 	var fileSize int64
-	err = ps.db.QueryRowContext(r.Context(),
+	err = ps.readDB.QueryRowContext(r.Context(),
 		`SELECT content_hash, file_size FROM duplicate_groups WHERE id = ?`, groupID,
 	).Scan(&contentHash, &fileSize)
 	if err != nil {
@@ -721,7 +752,7 @@ func (ps *pageServer) uiGroupDelete(w http.ResponseWriter, r *http.Request) {
 		Size  int64
 		MTime int64
 	}
-	fileRows, err := ps.db.QueryContext(r.Context(),
+	fileRows, err := ps.readDB.QueryContext(r.Context(),
 		`SELECT id, path, size, mtime FROM duplicate_files WHERE group_id = ?`, groupID)
 	if err != nil {
 		uiRedirect(w, r, "/groups-ui", "error", "Database error")
@@ -856,7 +887,7 @@ func (ps *pageServer) uiGroupIgnore(w http.ResponseWriter, r *http.Request) {
 	dirPath := r.FormValue("path")
 
 	var contentHash string
-	err = ps.db.QueryRowContext(r.Context(),
+	err = ps.readDB.QueryRowContext(r.Context(),
 		`SELECT content_hash FROM duplicate_groups WHERE id = ?`, groupID,
 	).Scan(&contentHash)
 	if err != nil {
@@ -875,7 +906,7 @@ func (ps *pageServer) uiGroupIgnore(w http.ResponseWriter, r *http.Request) {
 		newGroupStatus = "ignored"
 
 	case "path_pair":
-		pathRows, _ := ps.db.QueryContext(r.Context(),
+		pathRows, _ := ps.readDB.QueryContext(r.Context(),
 			`SELECT path FROM duplicate_files WHERE group_id = ? ORDER BY path`, groupID)
 		var paths []string
 		for pathRows.Next() {

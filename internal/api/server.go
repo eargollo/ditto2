@@ -24,9 +24,12 @@ type Server struct {
 }
 
 // New wires all routes and returns a Server ready to Run.
+// readDB is an optional read-only connection pool; when provided, page-handler
+// SELECT queries run through it so they don't contend with scan writes.
 func New(
 	addr string,
 	db *sql.DB,
+	readDB *sql.DB,
 	cfg *config.Config,
 	mgr *scan.Manager,
 	trashMgr *trash.Manager,
@@ -86,8 +89,13 @@ func New(
 		r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))))
 	}
 	if templatesFS != nil {
+		rdb := readDB
+		if rdb == nil {
+			rdb = db
+		}
 		ps := &pageServer{
 			db:          db,
+			readDB:      rdb,
 			mgr:         mgr,
 			trashMgr:    trashMgr,
 			cfg:         cfg,

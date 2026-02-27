@@ -44,6 +44,11 @@ type Config struct {
 	PartialHashers int
 	FullHashers    int
 	BatchSize      int
+	// ReadDB is an optional separate connection pool for read-only cache
+	// lookups. When non-nil it allows CacheCheckers to run truly in parallel
+	// (the main DB is locked to MaxOpenConns(1) for write safety).
+	// If nil, the scanner's main DB is used as a fallback.
+	ReadDB *sql.DB
 }
 
 // DefaultConfig returns sensible defaults.
@@ -152,6 +157,8 @@ func (s *Scanner) runPipeline(ctx context.Context, scanID int64, progress *Progr
 	cacheMisses := make(chan FileInfo, pipelineBufSize)
 	partialOut  := make(chan HashedFile, pipelineBufSize)
 	filteredOut := make(chan HashedFile, pipelineBufSize)
+	smallOut    := make(chan HashedFile, finalBufSize)   // files ≤ 64KB: partial hash == full hash
+	largeOut    := make(chan HashedFile, pipelineBufSize) // files > 64KB: need full hash
 	priorityOut := make(chan HashedFile, finalBufSize)
 	fullOut     := make(chan HashedFile, finalBufSize)
 	finalOut    := make(chan HashedFile, finalBufSize)
@@ -159,24 +166,32 @@ func (s *Scanner) runPipeline(ctx context.Context, scanID int64, progress *Progr
 	// Wire the error reporter: logs warnings and persists to scan_errors.
 	report := newErrorReporter(s.db, scanID, progress)
 
+	// Use a dedicated read pool for cache lookups when available — lets N
+	// CacheCheckers run truly in parallel (main DB is MaxOpenConns(1)).
+	cacheDB := s.db
+	if s.cfg.ReadDB != nil {
+		cacheDB = s.cfg.ReadDB
+	}
+
 	// Start pipeline stages (each manages its own goroutine(s)).
 	go Walk(ctx, s.roots, excludes, s.cfg.Walkers, walkOut, report)
 	RunSizeAccumulator(ctx, progress, walkOut, candidates)
-	RunCacheCheck(ctx, s.db, progress, s.cfg.CacheCheckers, candidates, cacheHits, cacheMisses)
+	RunCacheCheck(ctx, cacheDB, progress, s.cfg.CacheCheckers, candidates, cacheHits, cacheMisses)
 	RunPartialHashers(ctx, s.cfg.PartialHashers, progress, cacheMisses, partialOut, report)
 	RunPartialHashGrouper(ctx, partialOut, filteredOut)
-	// Sort by ascending size so small files are fully hashed first — maximises
-	// early cache population and keeps full-hasher slots busy with short jobs.
-	RunSizePriorityQueue(ctx, filteredOut, priorityOut)
+	// Route: files ≤ 64KB already fully hashed at partial stage → bypass full hasher.
+	// Larger files go through the priority queue (smallest first) then full hash.
+	RunSizeRouter(ctx, filteredOut, smallOut, largeOut)
+	RunSizePriorityQueue(ctx, largeOut, priorityOut)
 	RunFullHashers(ctx, s.cfg.FullHashers, progress, priorityOut, fullOut, report)
-	mergeHashedFiles(ctx, cacheHits, fullOut, finalOut)
+	mergeHashedFiles(ctx, finalOut, cacheHits, fullOut, smallOut)
 
 	// Progress reporter — flushes counters to DB every second.
 	reporterStop := make(chan struct{})
 	go progressReporter(ctx, s.db, scanID, progress, reporterStop)
 	defer close(reporterStop)
 
-	stats, err := RunDBWriter(ctx, s.db, scanID, s.cfg.BatchSize, finalOut)
+	stats, err := RunDBWriter(ctx, s.db, scanID, s.cfg.BatchSize, finalOut, progress)
 	if err != nil {
 		return err
 	}
@@ -191,31 +206,32 @@ func (s *Scanner) runPipeline(ctx context.Context, scanID int64, progress *Progr
 	return nil
 }
 
-// mergeHashedFiles fans in two HashedFile channels into one. out is closed
-// when both inputs are closed.
-func mergeHashedFiles(ctx context.Context, a, b <-chan HashedFile, out chan<- HashedFile) {
+// mergeHashedFiles fans in all ins channels into out. out is closed when
+// every input is closed or ctx is cancelled.
+func mergeHashedFiles(ctx context.Context, out chan<- HashedFile, ins ...<-chan HashedFile) {
 	var wg sync.WaitGroup
-	forward := func(in <-chan HashedFile) {
-		defer wg.Done()
-		for {
-			select {
-			case hf, ok := <-in:
-				if !ok {
-					return
-				}
+	for _, in := range ins {
+		in := in
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
 				select {
-				case out <- hf:
+				case hf, ok := <-in:
+					if !ok {
+						return
+					}
+					select {
+					case out <- hf:
+					case <-ctx.Done():
+						return
+					}
 				case <-ctx.Done():
 					return
 				}
-			case <-ctx.Done():
-				return
 			}
-		}
+		}()
 	}
-	wg.Add(2)
-	go forward(a)
-	go forward(b)
 	go func() {
 		wg.Wait()
 		close(out)
@@ -235,7 +251,10 @@ func progressReporter(ctx context.Context, db *sql.DB, scanID int64, p *Progress
 			    progress_bytes_read       = ?,
 			    cache_hits                = ?,
 			    cache_misses              = ?,
-			    errors                    = ?
+			    errors                    = ?,
+			    progress_groups_written   = ?,
+			    progress_groups_total     = ?,
+			    phase2_started_at         = ?
 			WHERE id = ?`,
 			p.FilesDiscovered.Load(),
 			p.CandidatesFound.Load(),
@@ -245,6 +264,9 @@ func progressReporter(ctx context.Context, db *sql.DB, scanID int64, p *Progress
 			p.CacheHits.Load(),
 			p.CacheMisses.Load(),
 			p.Errors.Load(),
+			p.GroupsWritten.Load(),
+			p.GroupsTotal.Load(),
+			p.Phase2StartedAt.Load(),
 			scanID)
 		if err != nil && ctx.Err() == nil {
 			slog.Warn("progress reporter: update failed", "error", err)

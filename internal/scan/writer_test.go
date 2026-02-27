@@ -31,7 +31,7 @@ func TestRunDBWriterFindsDuplicates(t *testing.T) {
 	}
 	close(in)
 
-	stats, err := RunDBWriter(context.Background(), db, scanID, 100, in)
+	stats, err := RunDBWriter(context.Background(), db, scanID, 100, in, nil)
 	if err != nil {
 		t.Fatalf("RunDBWriter: %v", err)
 	}
@@ -83,7 +83,7 @@ func TestProgressiveCacheUpdateSurvivesCancellation(t *testing.T) {
 	}
 	close(in)
 
-	_, err := RunDBWriter(ctx, db, scanID, batchSize, in)
+	_, err := RunDBWriter(ctx, db, scanID, batchSize, in, nil)
 	if err == nil {
 		t.Fatal("expected a non-nil error from cancelled context, got nil")
 	}

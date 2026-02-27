@@ -29,7 +29,7 @@ func Open(path string) (*sql.DB, error) {
 		"PRAGMA foreign_keys = ON",
 		"PRAGMA busy_timeout = 5000",
 		"PRAGMA synchronous = NORMAL",
-		"PRAGMA cache_size = -64000",
+		"PRAGMA cache_size = -131072", // 128 MB
 	}
 	for _, p := range pragmas {
 		if _, err := db.Exec(p); err != nil {
@@ -39,6 +39,33 @@ func Open(path string) (*sql.DB, error) {
 	}
 
 	return db, nil
+}
+
+// OpenReadPool opens a dedicated read-only connection pool to the same SQLite
+// database. WAL mode allows concurrent readers alongside a single writer, so
+// this pool can be used for read-intensive operations (e.g. cache check during
+// scans) without contending with the write connection.
+func OpenReadPool(path string, maxConns int) (*sql.DB, error) {
+	rdb, err := sql.Open("sqlite", path)
+	if err != nil {
+		return nil, fmt.Errorf("open sqlite read pool %q: %w", path, err)
+	}
+	rdb.SetMaxOpenConns(maxConns)
+
+	pragmas := []string{
+		"PRAGMA journal_mode = WAL",
+		"PRAGMA query_only = ON",
+		"PRAGMA busy_timeout = 5000",
+		"PRAGMA synchronous = NORMAL",
+		"PRAGMA cache_size = -131072", // 128 MB
+	}
+	for _, p := range pragmas {
+		if _, err := rdb.Exec(p); err != nil {
+			rdb.Close()
+			return nil, fmt.Errorf("pragma %q: %w", p, err)
+		}
+	}
+	return rdb, nil
 }
 
 // LoadSettings returns all rows from the settings table as a key→value map.

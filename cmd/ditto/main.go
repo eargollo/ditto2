@@ -65,6 +65,16 @@ func main() {
 		config.MergeDBSettings(cfg, dbSettings)
 	}
 
+	// Read-only connection pool for parallel cache lookups during scans.
+	// Falls back to the main DB if the pool cannot be opened.
+	readDB, err := db.OpenReadPool(cfg.DBPath, 4)
+	if err != nil {
+		slog.Warn("open read pool, falling back to main db", "error", err)
+		readDB = database
+	} else {
+		defer readDB.Close()
+	}
+
 	// Mark any scans that were 'running' when last process exited as failed.
 	if err := scan.MarkStaleScansFailed(database); err != nil {
 		slog.Warn("mark stale scans", "error", err)
@@ -77,6 +87,7 @@ func main() {
 		PartialHashers: cfg.ScanWorkers.PartialHashers,
 		FullHashers:    cfg.ScanWorkers.FullHashers,
 		BatchSize:      1000,
+		ReadDB:         readDB,
 	}
 	mgr := scan.NewManager(database, cfg.ScanPaths, cfg.ExcludePaths, scanCfg)
 
@@ -112,7 +123,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	srv := api.New(cfg.HTTPAddr, database, cfg, mgr, trashMgr, sched, version, web.Templates(), web.Static())
+	srv := api.New(cfg.HTTPAddr, database, readDB, cfg, mgr, trashMgr, sched, version, web.Templates(), web.Static())
 	if err := srv.Run(ctx); err != nil {
 		slog.Error("server error", "error", err)
 		os.Exit(1)

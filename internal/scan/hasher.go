@@ -46,6 +46,43 @@ func hashFull(path string) (hash string, n int64, err error) {
 	return hex.EncodeToString(h.Sum(nil)), n, nil
 }
 
+// RunSizeRouter splits the stream coming out of the partial-hash grouper into
+// two lanes:
+//   - small (Size ≤ partialHashBytes): the partial hash already consumed the
+//     whole file, so it equals the full hash — bypass the full hasher entirely.
+//   - large (Size > partialHashBytes): forward to the full hasher as normal.
+//
+// Both small and large are closed when in is exhausted or ctx is cancelled.
+func RunSizeRouter(ctx context.Context, in <-chan HashedFile, small, large chan<- HashedFile) {
+	go func() {
+		defer close(small)
+		defer close(large)
+		for {
+			select {
+			case hf, ok := <-in:
+				if !ok {
+					return
+				}
+				if hf.Size <= partialHashBytes {
+					select {
+					case small <- hf:
+					case <-ctx.Done():
+						return
+					}
+				} else {
+					select {
+					case large <- hf:
+					case <-ctx.Done():
+						return
+					}
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+}
+
 // RunPartialHashers spawns numWorkers goroutines. Each reads FileInfo from in,
 // computes the partial SHA-256, and sends a HashedFile (with partial hash) to
 // out. out is closed once all workers finish.

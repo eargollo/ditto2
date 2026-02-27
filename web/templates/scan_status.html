@@ -6,9 +6,61 @@
       <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
       <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
     </svg>
+    {{if eq .Phase "writing"}}
+    <span class="font-medium text-gray-900">Writing results...</span>
+    {{else}}
     <span class="font-medium text-gray-900">Scanning...</span>
-    <span class="text-sm text-gray-500">started at {{.StartedAt}} · triggered by {{.TriggeredBy}}</span>
+    {{end}}
+    <span class="text-sm text-gray-500">
+      started at {{.StartedAt}} · triggered by {{.TriggeredBy}} · elapsed {{formatDuration .ElapsedSecs}}
+    </span>
   </div>
+
+  {{if eq .Phase "writing"}}
+  {{/* ── Phase 2: writing duplicate groups to DB ─────────────────────── */}}
+  <div class="space-y-1.5">
+    <div class="flex justify-between text-sm">
+      <span class="text-gray-700">
+        Writing groups:
+        <span class="font-semibold text-gray-900">{{commaN .GroupsWritten}}</span>
+        / {{commaN .GroupsTotal}}
+        ({{pct .GroupsWritten .GroupsTotal}}%)
+      </span>
+      <span class="text-gray-500">
+        {{if gt .ETASecs 0}}~{{formatDuration .ETASecs}} remaining{{else if gt .GroupsWritten 0}}estimating...{{else}}starting...{{end}}
+      </span>
+    </div>
+    <div class="w-full bg-gray-200 rounded-full h-2.5">
+      <div class="bg-indigo-600 h-2.5 rounded-full transition-all duration-1000"
+           style="width: {{pct .GroupsWritten .GroupsTotal}}%"></div>
+    </div>
+  </div>
+  {{/* Phase 1 stats shown frozen as context */}}
+  <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 text-sm opacity-60">
+    <div class="bg-gray-50 rounded p-3">
+      <p class="text-xs text-gray-500">Files found</p>
+      <p class="font-semibold text-gray-900 mt-0.5">{{commaN .FilesDiscovered}}</p>
+    </div>
+    <div class="bg-gray-50 rounded p-3">
+      <p class="text-xs text-gray-500">Candidates</p>
+      <p class="font-semibold text-gray-900 mt-0.5">{{commaN .CandidatesFound}}</p>
+    </div>
+    <div class="bg-gray-50 rounded p-3">
+      <p class="text-xs text-gray-500">Partial hashed</p>
+      <p class="font-semibold text-gray-900 mt-0.5">{{commaN .PartialHashed}}</p>
+    </div>
+    <div class="bg-gray-50 rounded p-3">
+      <p class="text-xs text-gray-500">Full hashed</p>
+      <p class="font-semibold text-gray-900 mt-0.5">{{commaN .FullHashed}}</p>
+    </div>
+    <div class="bg-gray-50 rounded p-3">
+      <p class="text-xs text-gray-500">Bytes read</p>
+      <p class="font-semibold text-gray-900 mt-0.5">{{humanBytes .BytesRead}}</p>
+    </div>
+  </div>
+
+  {{else}}
+  {{/* ── Phase 1: hashing pipeline ───────────────────────────────────── */}}
   <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 text-sm">
     <div class="bg-gray-50 rounded p-3">
       <p class="text-xs text-gray-500">Files found</p>
@@ -31,6 +83,8 @@
       <p class="font-semibold text-gray-900 mt-0.5">{{humanBytes .BytesRead}}</p>
     </div>
   </div>
+  {{end}}
+
   <form method="POST" action="/ui/scan/cancel">
     <button type="submit"
       class="px-3 py-1.5 text-sm font-medium text-red-700 bg-red-50 border border-red-200 rounded-md hover:bg-red-100">

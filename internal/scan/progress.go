@@ -6,6 +6,7 @@ import "sync/atomic"
 // All fields are atomic so they can be written from worker goroutines and
 // read from the HTTP handler without locks.
 type Progress struct {
+	// Phase 1 — hashing pipeline
 	FilesDiscovered atomic.Int64
 	CandidatesFound atomic.Int64
 	PartialHashed   atomic.Int64
@@ -14,6 +15,11 @@ type Progress struct {
 	CacheHits       atomic.Int64
 	CacheMisses     atomic.Int64
 	Errors          atomic.Int64
+	// Phase 2 — DB write
+	// Phase2StartedAt is a Unix timestamp set when Phase 2 begins (0 = not started).
+	Phase2StartedAt atomic.Int64
+	GroupsTotal     atomic.Int64 // total duplicate groups to write
+	GroupsWritten   atomic.Int64 // duplicate groups written so far
 }
 
 // ErrorReporter records a per-file pipeline error: increments the error
