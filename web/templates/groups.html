@@ -41,7 +41,21 @@
       <option value="document" {{if eq .TypeFilter "document"}}selected{{end}}>Documents</option>
       <option value="other"    {{if eq .TypeFilter "other"}}selected{{end}}>Other</option>
     </select>
-    {{if or .StatusFilter .TypeFilter}}
+    <select name="sort" onchange="this.form.submit()"
+      class="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+      <option value="">Sort: Reclaimable</option>
+      <option value="size"   {{if eq .SortFilter "size"}}selected{{end}}>Sort: File Size</option>
+      <option value="count"  {{if eq .SortFilter "count"}}selected{{end}}>Sort: File Count</option>
+      <option value="newest" {{if eq .SortFilter "newest"}}selected{{end}}>Sort: Newest</option>
+    </select>
+    <select name="min" onchange="this.form.submit()"
+      class="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+      <option value="">Min: All sizes</option>
+      <option value="10mb"  {{if eq .MinFilter "10mb"}}selected{{end}}>&gt;10 MB</option>
+      <option value="100mb" {{if eq .MinFilter "100mb"}}selected{{end}}>&gt;100 MB</option>
+      <option value="1gb"   {{if eq .MinFilter "1gb"}}selected{{end}}>&gt;1 GB</option>
+    </select>
+    {{if or .StatusFilter .TypeFilter .SortFilter .MinFilter}}
     <a href="/groups-ui" class="text-sm text-gray-400 hover:text-gray-600">Clear</a>
     {{end}}
   </form>
@@ -308,11 +322,11 @@
     </span>
     <div class="flex gap-2">
       {{if .HasPrev}}
-      <a href="/groups-ui?offset={{.PrevOffset}}{{if .StatusFilter}}&amp;status={{.StatusFilter}}{{end}}{{if .TypeFilter}}&amp;type={{.TypeFilter}}{{end}}"
+      <a href="/groups-ui?offset={{.PrevOffset}}{{if .StatusFilter}}&amp;status={{.StatusFilter}}{{end}}{{if .TypeFilter}}&amp;type={{.TypeFilter}}{{end}}{{if .SortFilter}}&amp;sort={{.SortFilter}}{{end}}{{if .MinFilter}}&amp;min={{.MinFilter}}{{end}}"
         class="px-3 py-1.5 border border-gray-300 rounded-md bg-white text-gray-700 hover:bg-gray-50">&larr; Prev</a>
       {{end}}
       {{if .HasNext}}
-      <a href="/groups-ui?offset={{.NextOffset}}{{if .StatusFilter}}&amp;status={{.StatusFilter}}{{end}}{{if .TypeFilter}}&amp;type={{.TypeFilter}}{{end}}"
+      <a href="/groups-ui?offset={{.NextOffset}}{{if .StatusFilter}}&amp;status={{.StatusFilter}}{{end}}{{if .TypeFilter}}&amp;type={{.TypeFilter}}{{end}}{{if .SortFilter}}&amp;sort={{.SortFilter}}{{end}}{{if .MinFilter}}&amp;min={{.MinFilter}}{{end}}"
         class="px-3 py-1.5 border border-gray-300 rounded-md bg-white text-gray-700 hover:bg-gray-50">Next &rarr;</a>
       {{end}}
     </div>

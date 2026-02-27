@@ -195,6 +195,8 @@ type groupsPageData struct {
 	Offset           int
 	StatusFilter     string
 	TypeFilter       string
+	SortFilter       string // "", "size", "count", "newest"
+	MinFilter        string // "", "10mb", "100mb", "1gb"
 	NextOffset       int
 	PrevOffset       int
 	HasNext          bool
@@ -418,6 +420,27 @@ func (ps *pageServer) groupsPage(w http.ResponseWriter, r *http.Request) {
 		args = append(args, typeFilter)
 	}
 
+	sortOrders := map[string]string{
+		"size": "file_size DESC", "count": "file_count DESC", "newest": "updated_at DESC",
+	}
+	sortParam := q.Get("sort")
+	orderBy, ok := sortOrders[sortParam]
+	if !ok {
+		orderBy = "reclaimable_bytes DESC"
+		sortParam = ""
+	}
+
+	minPresets := map[string]int64{
+		"10mb": 10_485_760, "100mb": 104_857_600, "1gb": 1_073_741_824,
+	}
+	minParam := q.Get("min")
+	if minVal, ok := minPresets[minParam]; ok {
+		where += " AND reclaimable_bytes >= ?"
+		args = append(args, minVal)
+	} else {
+		minParam = ""
+	}
+
 	// Overall active stats (always from active groups, regardless of filter).
 	var totalActiveGroups, totalActiveFiles, totalReclaimable int64
 	ps.readDB.QueryRowContext(r.Context(), `
@@ -436,7 +459,7 @@ func (ps *pageServer) groupsPage(w http.ResponseWriter, r *http.Request) {
 		SELECT id, content_hash, file_size, file_count, reclaimable_bytes, file_type, status
 		FROM duplicate_groups
 		WHERE 1=1`+where+`
-		ORDER BY reclaimable_bytes DESC
+		ORDER BY `+orderBy+`
 		LIMIT ? OFFSET ?`, queryArgs...)
 
 	var groups []groupWithFiles
@@ -514,6 +537,8 @@ func (ps *pageServer) groupsPage(w http.ResponseWriter, r *http.Request) {
 		Offset:            offset,
 		StatusFilter:      statusFilter,
 		TypeFilter:        typeFilter,
+		SortFilter:        sortParam,
+		MinFilter:         minParam,
 		NextOffset:        nextOffset,
 		PrevOffset:        prevOffset,
 		HasNext:           hasNext,

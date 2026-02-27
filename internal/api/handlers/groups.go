@@ -71,6 +71,16 @@ func (h *GroupsHandler) List(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	sortOrders := map[string]string{
+		"size": "file_size DESC", "count": "file_count DESC", "newest": "updated_at DESC",
+	}
+	orderBy := "reclaimable_bytes DESC"
+	if s := q.Get("sort"); s != "" {
+		if mapped, ok := sortOrders[s]; ok {
+			orderBy = mapped
+		}
+	}
+
 	countArgs := append([]interface{}{}, args...)
 	var total int
 	h.DB.QueryRowContext(r.Context(),
@@ -84,7 +94,7 @@ func (h *GroupsHandler) List(w http.ResponseWriter, r *http.Request) {
 		       file_type, status, created_at, updated_at
 		FROM duplicate_groups
 		WHERE 1=1`+where+`
-		ORDER BY reclaimable_bytes DESC
+		ORDER BY `+orderBy+`
 		LIMIT ? OFFSET ?`, queryArgs...)
 	if err != nil {
 		slog.Error("groups list: query", "error", err)
